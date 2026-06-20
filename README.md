@@ -8,7 +8,7 @@ Synapse Platform 是基于 Java 21、Spring Boot、Spring Cloud 和 Spring Cloud
 - Gateway 已实现 Reactive JWT 入口认证、明确白名单和默认保护策略。
 - Gateway 会清理外部 `X-Synapse-Gateway-*` Header，并为最终下游请求签发 GatewayProof。
 - Gateway 提供 Java 21 非 root 镜像、Docker Compose 部署、健康检查和失败回滚。
-- 其他平台模块仍处于不同建设阶段；部分历史 POM 引用已从当前 Framework 删除或更名的 artifact，尚待独立任务迁移。
+- 其他平台模块仍处于不同建设阶段；全仓 POM 已移除当前 Framework 不再提供的 artifact，并按现有代码需要直接声明 Spring Cloud Alibaba 组件。
 
 ## 模块概览
 
@@ -35,24 +35,24 @@ Synapse Platform 是基于 Java 21、Spring Boot、Spring Cloud 和 Spring Cloud
 当前事实以本地 `../synapse-framework` 根 POM、`synapse-bom`、源码和模块手册为准。
 
 - 根 POM import `com.indigo.synapse:synapse-bom:0.1.0-SNAPSHOT`。
-- Platform 直接依赖官方 Spring Cloud Gateway、LoadBalancer、Nacos Discovery/Config。
+- Platform 应用按实际需要直接依赖 Spring Cloud Gateway、LoadBalancer、OpenFeign、Nacos Discovery/Config 等官方组件，不通过 Framework 聚合模块间接获取。
 - Framework 当前已删除 `synapse-cloud` 和 `synapse-file`。
 - 原 `synapse-mq` 已更名为 `synapse-messaging`。
+- Framework `synapse-messaging` 提供消息技术契约；Platform `synapse-message-platform` 是独立的业务消息服务，两者职责不同。
 - Gateway 使用 Framework 的 `synapse-webflux`、`synapse-security` 和 `synapse-oauth2-resource-server-webflux`。
 
-本地开发先安装 Framework：
-
-```bash
-cd ../synapse-framework
-mvn clean install
-cd ../synapse-platform
-```
-
-如果不使用相邻源码仓库，请确保 Maven `settings.xml` 已配置可访问 Framework Packages 的凭据。凭据不得提交到本仓库。
+构建前应确保当前 Framework 构件可由本地 Maven 仓库或已配置的远程仓库解析。若使用 GitHub Packages，请在 Maven `settings.xml` 中配置访问凭据；凭据不得提交到本仓库。
 
 ## Gateway 快速验证
 
-由于其他模块仍有历史失效依赖，当前 Gateway 定向构建使用模块 POM：
+全仓构建基线：
+
+```bash
+mvn validate
+mvn clean test
+```
+
+Gateway 定向验证可使用模块 POM：
 
 ```bash
 mvn -f synapse-gateway-platform/pom.xml clean test

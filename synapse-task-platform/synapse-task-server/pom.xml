@@ -9,9 +9,7 @@
         <dependency><groupId>com.indigo.synapse.platform</groupId><artifactId>synapse-task-api</artifactId></dependency>
         <dependency><groupId>com.indigo.synapse</groupId><artifactId>synapse-core</artifactId></dependency>
         <dependency><groupId>com.indigo.synapse</groupId><artifactId>synapse-webmvc</artifactId></dependency>
-        <dependency><groupId>com.indigo.synapse</groupId><artifactId>synapse-cloud</artifactId></dependency>
         <dependency><groupId>com.indigo.synapse</groupId><artifactId>synapse-time</artifactId></dependency>
-        <dependency><groupId>com.indigo.synapse</groupId><artifactId>synapse-mq</artifactId></dependency>
         <dependency><groupId>com.indigo.synapse</groupId><artifactId>synapse-cache</artifactId></dependency>
         <dependency><groupId>com.indigo.synapse</groupId><artifactId>synapse-audit</artifactId></dependency>
         <dependency><groupId>com.indigo.synapse</groupId><artifactId>synapse-data</artifactId></dependency>

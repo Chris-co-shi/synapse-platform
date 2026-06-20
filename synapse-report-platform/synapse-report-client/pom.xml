@@ -5,7 +5,5 @@
     <artifactId>synapse-report-client</artifactId>
     <dependencies>
         <dependency><groupId>com.indigo.synapse.platform</groupId><artifactId>synapse-report-api</artifactId></dependency>
-        <dependency><groupId>com.indigo.synapse</groupId><artifactId>synapse-cloud</artifactId></dependency>
-        <dependency><groupId>org.springframework.cloud</groupId><artifactId>spring-cloud-starter-openfeign</artifactId></dependency>
     </dependencies>
 </project>

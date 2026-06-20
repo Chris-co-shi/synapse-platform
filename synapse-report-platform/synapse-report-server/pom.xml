@@ -7,9 +7,7 @@
         <dependency><groupId>com.indigo.synapse.platform</groupId><artifactId>synapse-report-api</artifactId></dependency>
         <dependency><groupId>com.indigo.synapse</groupId><artifactId>synapse-core</artifactId></dependency>
         <dependency><groupId>com.indigo.synapse</groupId><artifactId>synapse-webmvc</artifactId></dependency>
-        <dependency><groupId>com.indigo.synapse</groupId><artifactId>synapse-cloud</artifactId></dependency>
         <dependency><groupId>com.indigo.synapse</groupId><artifactId>synapse-time</artifactId></dependency>
-        <dependency><groupId>com.indigo.synapse</groupId><artifactId>synapse-file</artifactId></dependency>
         <dependency><groupId>com.indigo.synapse</groupId><artifactId>synapse-audit</artifactId></dependency>
         <dependency><groupId>com.indigo.synapse</groupId><artifactId>synapse-data</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>

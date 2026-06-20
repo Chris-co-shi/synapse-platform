@@ -28,10 +28,6 @@
         </dependency>
         <dependency>
             <groupId>com.indigo.synapse</groupId>
-            <artifactId>synapse-cloud</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.indigo.synapse</groupId>
             <artifactId>synapse-time</artifactId>
         </dependency>
         <dependency>

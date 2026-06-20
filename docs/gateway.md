@@ -182,15 +182,14 @@ Gateway 已认证不能成为下游跳过 JWT 验证或业务授权的理由。
 
 ## 8. 本地构建与验证
 
-先安装当前 Framework：
+构建前应确保当前 Framework 构件可由本地 Maven 仓库或已配置的远程仓库解析。全仓基线验证使用：
 
 ```bash
-cd ../synapse-framework
-mvn clean install
-cd ../synapse-platform
+mvn validate
+mvn clean test
 ```
 
-当前其他 Platform 模块仍有已删除 Framework artifact 的历史依赖，因此 Gateway 定向构建使用子 POM：
+Gateway 定向验证使用子 POM：
 
 ```bash
 mvn -f synapse-gateway-platform/pom.xml clean test
