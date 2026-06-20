@@ -1,4 +1,4 @@
-package com.indigo.synapse.gateway.bootstrap;
+package com.indigo.synapse.gateway;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

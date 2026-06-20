@@ -1,6 +1,6 @@
 package com.indigo.synapse.gateway.security;
 
-import com.indigo.synapse.gateway.bootstrap.SynapseGatewayApplication;
+import com.indigo.synapse.gateway.SynapseGatewayApplication;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
