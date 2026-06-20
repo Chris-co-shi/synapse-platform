@@ -31,7 +31,7 @@
 - `synapse-iam-platform-server` 迁移为 `synapse-iam-server`。
 - Message / File / Task 同步迁移为 `synapse-xxx-api/client/server`。
 - Java 包名迁移为 `com.indigo.synapse.{module}`。
-- 启动类迁移到 `com.indigo.synapse.{module}.bootstrap`。
+- 启动类最终统一位于领域根包 `com.indigo.synapse.{module}`；历史 `bootstrap` 目录规范已废止。
 
 ## 依赖方向
 

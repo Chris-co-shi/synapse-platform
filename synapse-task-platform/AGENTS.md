@@ -11,6 +11,7 @@ Task 提供平台任务调度与任务运行时边界；当前不预设未落地
 - api 保存稳定任务调用契约。
 - client 提供调用适配，只依赖 api。
 - server 承载启动入口和任务实现并允许依赖 api。
+- Task 启动类必须位于 `com.indigo.synapse.task` 根包，禁止放入 `bootstrap` 子包。
 
 ## 3. 允许依赖
 

@@ -11,6 +11,7 @@ Message 承载平台消息服务；Framework 当前技术模块名称为 `synaps
 - api 保存稳定消息服务契约。
 - client 提供调用适配，只依赖 api。
 - server 承载启动入口和平台消息实现并允许依赖 api。
+- Message 启动类必须位于 `com.indigo.synapse.message` 根包，禁止放入 `bootstrap` 子包。
 
 ## 3. 允许依赖
 

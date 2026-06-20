@@ -56,8 +56,10 @@ class GatewayJwtSecurityIntegrationTest {
     @Test
     void shouldAllowHealthAndExplicitIamPublicPathsWithoutUserToken() {
         client().get().uri("/actuator/health").exchange().expectStatus().isOk();
+        client().get().uri("/actuator/health/readiness").exchange().expectStatus().isOk();
         assertThat(statusOf("/iam/oauth2/token")).isNotEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(statusOf("/iam/oauth2/jwks")).isNotEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(statusOf("/iam/.well-known/openid-configuration")).isNotEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     @Test
@@ -67,20 +69,22 @@ class GatewayJwtSecurityIntegrationTest {
                 .expectHeader().valueEquals("WWW-Authenticate", "Bearer")
                 .expectBody()
                 .jsonPath("$.code").isEqualTo("OAUTH2_INVALID_TOKEN");
-        client().get().uri("/test/protected").headers(headers -> headers.setBearerAuth("invalid"))
-                .exchange().expectStatus().isUnauthorized();
-    }
-
-    @Test
-    void shouldRejectIssuerAudienceAndRequiredClaimFailures() {
-        for (String token : List.of("wrong-issuer", "wrong-audience", "missing-claim")) {
+        for (String token : List.of("malformed", "bad-signature")) {
             client().get().uri("/test/protected").headers(headers -> headers.setBearerAuth(token))
                     .exchange().expectStatus().isUnauthorized();
         }
     }
 
     @Test
-    void shouldAllowValidAccessTokenToReachTestDownstream() {
+    void shouldRejectExpiredIssuerAudienceAndRequiredClaimFailures() {
+        for (String token : List.of("expired", "not-before", "wrong-issuer", "wrong-audience", "missing-claim")) {
+            client().get().uri("/test/protected").headers(headers -> headers.setBearerAuth(token))
+                    .exchange().expectStatus().isUnauthorized();
+        }
+    }
+
+    @Test
+    void shouldForwardValidTokenWithoutBusinessPermissionClaims() {
         client().get().uri("/test/protected").headers(headers -> headers.setBearerAuth("valid"))
                 .exchange().expectStatus().isOk().expectBody(String.class).isEqualTo("ok");
     }
@@ -120,8 +124,11 @@ class GatewayJwtSecurityIntegrationTest {
         ReactiveJwtDecoder testReactiveJwtDecoder(
                 @Qualifier("synapseReactiveSpringJwtValidator") OAuth2TokenValidator<Jwt> validator) {
             return token -> {
-                if ("invalid".equals(token)) {
-                    return Mono.error(new BadJwtException("invalid token"));
+                if ("malformed".equals(token)) {
+                    return Mono.error(new BadJwtException("malformed token"));
+                }
+                if ("bad-signature".equals(token)) {
+                    return Mono.error(new BadJwtException("token signature is invalid"));
                 }
                 Jwt jwt = jwt(token);
                 OAuth2TokenValidatorResult result = validator.validate(jwt);
@@ -134,18 +141,24 @@ class GatewayJwtSecurityIntegrationTest {
 
         private static Jwt jwt(String token) {
             Instant now = Instant.now();
+            Instant issuedAt = "expired".equals(token) ? now.minusSeconds(120) : now.minusSeconds(10);
+            Instant expiresAt = "expired".equals(token) ? now.minusSeconds(60) : now.plusSeconds(300);
             Map<String, Object> claims = new java.util.LinkedHashMap<>();
             if (!"missing-claim".equals(token)) {
                 claims.put("sub", "user-1");
             }
             claims.put("iss", "wrong-issuer".equals(token) ? "https://wrong.test" : "https://iam.test");
             claims.put("aud", List.of("wrong-audience".equals(token) ? "other-service" : "synapse-platform"));
-            claims.put("iat", now.minusSeconds(10));
-            claims.put("exp", now.plusSeconds(300));
+            claims.put("iat", issuedAt);
+            claims.put("exp", expiresAt);
+            if ("not-before".equals(token)) {
+                claims.put("nbf", now.plusSeconds(120));
+            }
             claims.put("token_type", "ACCESS_TOKEN");
             claims.put("principal_type", "USER");
             claims.put("username", "tester");
-            return new Jwt(token, now.minusSeconds(10), now.plusSeconds(300),
+            // 故意不放 roles、permissions 或 scope，验证 Gateway 不执行任何业务 authority 判断。
+            return new Jwt(token, issuedAt, expiresAt,
                     Map.of("alg", "none"), claims);
         }
     }

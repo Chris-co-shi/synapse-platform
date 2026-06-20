@@ -11,6 +11,7 @@ IAM 承载平台认证、主体和授权模型以及 Token 签发业务。Framew
 - `synapse-iam-api`：稳定调用契约，不暴露数据库 Entity。
 - `synapse-iam-client`：IAM 调用适配，只依赖对应 api。
 - `synapse-iam-server`：IAM 启动入口和业务实现，允许使用 WebMVC 与数据访问能力。
+- IAM 启动类必须位于 `com.indigo.synapse.iam` 根包，禁止放入 `bootstrap` 子包。
 
 ## 3. 允许依赖
 

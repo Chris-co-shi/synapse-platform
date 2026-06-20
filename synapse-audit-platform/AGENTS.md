@@ -11,6 +11,7 @@ Audit 承载平台审计运行时服务；Framework `synapse-audit` 只提供审
 - api 保存稳定审计调用契约。
 - client 提供调用适配，只依赖 api。
 - server 承载启动入口与平台审计实现并允许依赖 api。
+- Audit 启动类必须位于 `com.indigo.synapse.audit` 根包，禁止放入 `bootstrap` 子包。
 
 ## 3. 允许依赖
 

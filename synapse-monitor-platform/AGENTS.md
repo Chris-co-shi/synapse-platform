@@ -11,6 +11,7 @@ Monitor 承载平台监控运行时能力；Framework Observability 仅提供通
 - api 保存稳定监控调用契约。
 - client 提供调用适配，只依赖 api。
 - server 承载启动入口和监控实现并允许依赖 api。
+- Monitor 启动类必须位于 `com.indigo.synapse.monitor` 根包，禁止放入 `bootstrap` 子包。
 
 ## 3. 允许依赖
 

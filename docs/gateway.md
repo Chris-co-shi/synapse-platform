@@ -11,27 +11,31 @@ Gateway 是平台统一外部入口，负责：
 - 明确公开路径白名单，其他路径默认要求认证。
 - 清理外部伪造的 `X-Synapse-Gateway-*` Header。
 - 为下游请求签发 GatewayProof。
+- 原样转发客户端 Bearer Token。
 
-Gateway 不访问数据库，不签发用户 Token，不查询用户权限，不承载 IAM 用户/角色/菜单业务，也不传播可直接信任的身份 Header。
+Gateway 不访问数据库，不签发用户 Token，不查询或判断业务权限，不承载 IAM 用户/角色/菜单业务，也不传播可直接信任的身份 Header。接口、资源、组织、租户和数据权限全部由下游服务处理。
 
 ## 2. 请求安全链路
 
-```text
-客户端请求
-  -> Framework Reactive Resource Server 验证 JWT
-  -> Gateway 路由匹配与 StripPrefix
-  -> 清理全部外部 X-Synapse-Gateway-* Header
-  -> 为最终下游请求签发 GatewayProof
-  -> 保留原始 Authorization: Bearer token
-  -> 转发下游
-  -> 下游独立验证 GatewayProof 和 JWT
+```mermaid
+flowchart TD
+    A["客户端请求"] --> B["Reactive Resource Server 提取 Bearer Token"]
+    B --> C["验证签名、时间、issuer、audience、token type 和 required claims"]
+    C -->|"失败"| D["Gateway 返回 401"]
+    C -->|"成功或公开路径"| E["清理外部 X-Synapse-Gateway-* Header"]
+    E --> F["Route 匹配与 StripPrefix"]
+    F --> G["按最终路径和 Bearer Token hash 签发 GatewayProof"]
+    G --> H["原样携带 Bearer Token 转发下游"]
+    H --> I["下游再次验证 JWT 与 GatewayProof"]
+    I --> J["下游执行接口、资源和数据权限"]
+    J -->|"权限不足"| K["下游返回 403"]
 ```
 
-JWT 证明调用主体身份，GatewayProof 证明请求经过可信 Gateway。两者不能互相替代。
+JWT 证明调用主体身份，GatewayProof 证明请求经过可信 Gateway。GatewayProof 不能证明用户具备业务权限，两者均不能替代下游授权。
 
 ## 3. JWT 验证
 
-Gateway 复用 Framework `synapse-oauth2-resource-server-webflux`，由其提供 Reactive decoder、issuer/audience/claim 校验、安全链、主体映射和统一 401/403 响应。
+Gateway 复用 Framework `synapse-oauth2-resource-server-webflux`，由其完成 Bearer Token 提取、Reactive decoder、签名/时间/issuer/audience/claim 校验、Authentication 建立和统一 401 响应。Gateway 安全链只采用“公开路径 permitAll，其余路径 authenticated”，不配置业务 authority 或 role 判断。
 
 关键配置：
 
@@ -50,6 +54,8 @@ synapse.security.resource-server:
 
 当前没有真实 `TokenDenylistPort`，因此显式关闭 denylist。当前实现不支持实时撤销已经签发且未过期的 Token，不得将其描述为已具备实时撤销能力。
 
+Token 格式、签名、有效期、`nbf`、issuer、audience、token type 或 required claim 任一不合法时，Gateway 返回 401。合法 Token 即使没有 permissions、roles 或 scope claim，也允许进入转发流程；Gateway 不产生业务权限不足的 403。
+
 ### 3.1 公开路径
 
 仅以下路径无需用户 Access Token：
@@ -65,6 +71,8 @@ synapse.security.resource-server:
 ```
 
 未公开整个 `/iam/**` 或 `/oauth2/**`。白名单匹配 Gateway 对外路径；`StripPrefix=1` 发生在路由转发阶段，不改变安全链看到的外部路径。
+
+当前 IAM Server 尚未实现 OAuth2 Token、JWK 和 discovery 生产端点，上述 IAM 路径是为后续 IAM 能力预留的明确白名单，不代表端点已经可用。当前测试只验证 Gateway 不会错误返回 401；下游不存在时仍可能返回 503。
 
 ## 4. GatewayProof 协议
 
@@ -142,7 +150,21 @@ StripPrefix 后：GET /test?b=2&a=1
 
 服务实例由 Nacos Discovery 和 Spring Cloud LoadBalancer 解析。
 
-## 6. 环境变量
+## 6. 下游认证与授权
+
+Gateway 保留原始 `Authorization: Bearer ...` Header，不写入或信任 `X-User-Id`、`X-Username`、`X-Roles`、`X-Permissions` 等身份权限 Header。
+
+每个下游服务必须：
+
+1. 独立验证 JWT 签名、时间、issuer、audience 和 claim contract。
+2. 验证 GatewayProof，确认请求经过可信 Gateway 且签名材料未被篡改。
+3. 在 Controller、方法或业务层执行接口和资源权限。
+4. 执行组织、租户、数据范围及资源归属判断。
+5. 在业务权限不足时由下游返回 403。
+
+Gateway 已认证不能成为下游跳过 JWT 验证或业务授权的理由。
+
+## 7. 环境变量
 
 | 变量 | 用途 |
 | --- | --- |
@@ -158,7 +180,7 @@ StripPrefix 后：GET /test?b=2&a=1
 | `GATEWAY_ID` | Gateway 标识 |
 | `GATEWAY_PROOF_SECRET` | HMAC secret，开启证明时必填 |
 
-## 7. 本地构建与验证
+## 8. 本地构建与验证
 
 先安装当前 Framework：
 
@@ -184,7 +206,7 @@ IAM_JWK_SET_URI=http://127.0.0.1:20001/oauth2/jwks \
 mvn -f synapse-gateway-platform/pom.xml spring-boot:run
 ```
 
-## 8. curl 示例
+## 9. curl 示例
 
 ```bash
 curl -i http://127.0.0.1:20000/actuator/health/readiness
@@ -195,7 +217,7 @@ curl -i -H 'Authorization: Bearer <access-token>' \
 
 第二个请求应返回 401。第三个请求只有在 Token、IAM JWK、Nacos 和下游服务均有效时才能成功转发。不要把真实 Token 写入脚本或提交到仓库。
 
-## 9. 常见故障
+## 10. 常见故障
 
 - 启动提示 issuer/audience 配置非法：检查 `IAM_ISSUER_URI` 和 `SYNAPSE_GATEWAY_AUDIENCE`。
 - JWT 始终返回 401：检查 JWK 可达性、Token 签名、issuer、audience、有效期和必填 claim。
@@ -204,6 +226,6 @@ curl -i -H 'Authorization: Bearer <access-token>' \
 - 路由返回 503：检查 Nacos 注册、namespace/group 和目标服务名。
 - macOS 出现 Netty DNS native 警告：公共依赖已移除 Mac 专用 native artifact；警告不应通过污染 Linux 镜像解决。
 
-## 10. Kubernetes 后续边界
+## 11. Kubernetes 后续边界
 
 当前没有 Kubernetes YAML 或 Helm。Gateway 已保持无状态、环境变量配置、stdout/stderr 日志、readiness/liveness 端点和 SIGTERM 优雅停机，后续可映射 Deployment、Service、ConfigMap、Secret 及 probes。迁移任务应独立设计，不在本任务伪称已实现。

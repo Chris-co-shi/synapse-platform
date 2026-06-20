@@ -8,7 +8,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  *
  * <p>该应用只启用 Reactive Gateway、认证和路由基础设施，不承载业务 Controller 或数据库访问。</p>
  */
-@SpringBootApplication(scanBasePackages = "com.indigo.synapse.gateway")
+@SpringBootApplication
 public class SynapseGatewayApplication {
 
     /**
