@@ -1,0 +1,18 @@
+spring:
+  cloud:
+    nacos:
+      discovery:
+        namespace: ${NACOS_NAMESPACE:prd}
+        group: ${NACOS_GROUP:SYNAPSE_PLATFORM_PRD}
+      config:
+        namespace: ${NACOS_NAMESPACE:prd}
+        group: ${NACOS_GROUP:SYNAPSE_PLATFORM_PRD}
+
+management:
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    com.indigo.synapse: INFO

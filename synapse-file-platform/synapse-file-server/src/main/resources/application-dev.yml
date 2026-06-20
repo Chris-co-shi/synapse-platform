@@ -1,0 +1,13 @@
+spring:
+  cloud:
+    nacos:
+      discovery:
+        namespace: ${NACOS_NAMESPACE:dev}
+        group: ${NACOS_GROUP:SYNAPSE_PLATFORM_DEV}
+      config:
+        namespace: ${NACOS_NAMESPACE:dev}
+        group: ${NACOS_GROUP:SYNAPSE_PLATFORM_DEV}
+
+logging:
+  level:
+    com.indigo.synapse: DEBUG

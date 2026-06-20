@@ -1,0 +1,53 @@
+spring:
+  application:
+    name: synapse-iam-server
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  config:
+    import: optional:nacos:${spring.application.name}.${spring.cloud.nacos.config.file-extension}
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:dev}
+        group: ${NACOS_GROUP:SYNAPSE_PLATFORM_DEV}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:dev}
+        group: ${NACOS_GROUP:SYNAPSE_PLATFORM_DEV}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+        file-extension: yml
+
+server:
+  port: ${SERVER_PORT:20001}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+
+synapse:
+  security:
+
+    resource-server:
+      enabled: true
+      issuer-uri: http://127.0.0.1:20001
+      jwk-set-uri: http://127.0.0.1:20001/oauth2/jwks
+      audiences:
+        - synapse-platform
+  time:
+    default-zone: UTC
+  cloud:
+    enabled: true

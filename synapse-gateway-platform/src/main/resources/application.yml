@@ -1,0 +1,129 @@
+spring:
+  application:
+    name: synapse-gateway-platform
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  config:
+    import: optional:nacos:${spring.application.name}.${spring.cloud.nacos.config.file-extension}
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:dev}
+        group: ${NACOS_GROUP:SYNAPSE_PLATFORM_DEV}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:dev}
+        group: ${NACOS_GROUP:SYNAPSE_PLATFORM_DEV}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+        file-extension: yml
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: synapse-iam-server
+              uri: lb://synapse-iam-server
+              predicates:
+                - Path=/iam/**
+              filters:
+                - StripPrefix=1
+            - id: synapse-resource-server
+              uri: lb://synapse-resource-server
+              predicates:
+                - Path=/resource/**
+              filters:
+                - StripPrefix=1
+            - id: synapse-config-server
+              uri: lb://synapse-config-server
+              predicates:
+                - Path=/config/**
+              filters:
+                - StripPrefix=1
+            - id: synapse-audit-server
+              uri: lb://synapse-audit-server
+              predicates:
+                - Path=/audit/**
+              filters:
+                - StripPrefix=1
+            - id: synapse-file-server
+              uri: lb://synapse-file-server
+              predicates:
+                - Path=/file/**
+              filters:
+                - StripPrefix=1
+            - id: synapse-message-server
+              uri: lb://synapse-message-server
+              predicates:
+                - Path=/message/**
+              filters:
+                - StripPrefix=1
+            - id: synapse-task-server
+              uri: lb://synapse-task-server
+              predicates:
+                - Path=/task/**
+              filters:
+                - StripPrefix=1
+            - id: synapse-workflow-server
+              uri: lb://synapse-workflow-server
+              predicates:
+                - Path=/workflow/**
+              filters:
+                - StripPrefix=1
+            - id: synapse-integration-server
+              uri: lb://synapse-integration-server
+              predicates:
+                - Path=/integration/**
+              filters:
+                - StripPrefix=1
+            - id: synapse-mdm-server
+              uri: lb://synapse-mdm-server
+              predicates:
+                - Path=/mdm/**
+              filters:
+                - StripPrefix=1
+            - id: synapse-report-server
+              uri: lb://synapse-report-server
+              predicates:
+                - Path=/report/**
+              filters:
+                - StripPrefix=1
+            - id: synapse-monitor-server
+              uri: lb://synapse-monitor-server
+              predicates:
+                - Path=/monitor/**
+              filters:
+                - StripPrefix=1
+
+server:
+  port: ${SERVER_PORT:20000}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+
+synapse:
+  time:
+    default-zone: UTC
+  cloud:
+    enabled: true
+    feign:
+      enabled: false
+
+logging:
+  level:
+    io.netty.resolver.dns: DEBUG
+    io.netty.resolver.dns.macos: DEBUG
+    io.netty.util.internal.NativeLibraryLoader: DEBUG

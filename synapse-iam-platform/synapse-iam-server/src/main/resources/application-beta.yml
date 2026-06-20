@@ -1,0 +1,18 @@
+spring:
+  cloud:
+    nacos:
+      discovery:
+        namespace: ${NACOS_NAMESPACE:beta}
+        group: ${NACOS_GROUP:SYNAPSE_PLATFORM_BETA}
+      config:
+        namespace: ${NACOS_NAMESPACE:beta}
+        group: ${NACOS_GROUP:SYNAPSE_PLATFORM_BETA}
+
+synapse:
+  oauth2:
+    production: false
+    key-id: synapse-beta
+
+logging:
+  level:
+    com.indigo.synapse: INFO
