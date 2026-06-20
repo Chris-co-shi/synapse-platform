@@ -11,3 +11,8 @@ spring:
 logging:
   level:
     com.indigo.synapse: DEBUG
+
+synapse:
+  gateway:
+    proof:
+      enabled: ${GATEWAY_PROOF_ENABLED:false}

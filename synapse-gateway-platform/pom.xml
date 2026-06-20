@@ -24,15 +24,15 @@
         </dependency>
         <dependency>
             <groupId>com.indigo.synapse</groupId>
-            <artifactId>synapse-cloud</artifactId>
+            <artifactId>synapse-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.indigo.synapse</groupId>
+            <artifactId>synapse-oauth2-resource-server-webflux</artifactId>
         </dependency>
         <dependency>
             <groupId>com.indigo.synapse</groupId>
             <artifactId>synapse-time</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.indigo.synapse</groupId>
-            <artifactId>synapse-cache</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.cloud</groupId>
@@ -49,6 +49,13 @@
         <dependency>
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+            <exclusions>
+                <!-- Gateway 不访问数据库，排除 Nacos starter 的非必要 Druid 传递依赖。 -->
+                <exclusion>
+                    <groupId>com.alibaba</groupId>
+                    <artifactId>druid-spring-boot-starter</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -56,10 +63,14 @@
         </dependency>
 
         <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-resolver-dns-native-macos</artifactId>
-            <classifier>osx-aarch_64</classifier>
-            <scope>runtime</scope>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
@@ -68,6 +79,13 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

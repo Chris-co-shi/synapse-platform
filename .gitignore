@@ -37,3 +37,7 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### Docker deployment runtime state ###
+deploy/docker/gateway/.env
+deploy/docker/gateway/.release/

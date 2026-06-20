@@ -117,13 +117,27 @@ management:
 synapse:
   time:
     default-zone: UTC
-  cloud:
-    enabled: true
-    feign:
-      enabled: false
-
-logging:
-  level:
-    io.netty.resolver.dns: DEBUG
-    io.netty.resolver.dns.macos: DEBUG
-    io.netty.util.internal.NativeLibraryLoader: DEBUG
+  security:
+    resource-server:
+      enabled: true
+      issuer-uri: ${IAM_ISSUER_URI:http://127.0.0.1:20001}
+      jwk-set-uri: ${IAM_JWK_SET_URI:http://127.0.0.1:20001/oauth2/jwks}
+      issuer-validation-enabled: true
+      audience-validation-enabled: true
+      audiences:
+        - ${SYNAPSE_GATEWAY_AUDIENCE:synapse-platform}
+      denylist-enabled: false
+      csrf-enabled: false
+      permit-paths:
+        - /actuator/health
+        - /actuator/health/**
+        - /actuator/info
+        - /error
+        - /iam/.well-known/**
+        - /iam/oauth2/token
+        - /iam/oauth2/jwks
+  gateway:
+    proof:
+      enabled: ${GATEWAY_PROOF_ENABLED:false}
+      gateway-id: ${GATEWAY_ID:synapse-gateway}
+      secret: ${GATEWAY_PROOF_SECRET:}

@@ -1,0 +1,17 @@
+.git
+.github
+.idea
+.vscode
+.DS_Store
+**/src/test
+**/target/*
+!synapse-gateway-platform/target/
+!synapse-gateway-platform/target/*.jar
+docs
+*.log
+.env
+.env.*
+!.env.example
+**/.release
+secrets
+**/settings.xml

@@ -1,38 +1,24 @@
-# AGENTS.md
+# Synapse Platform AI 协作规范
 
-本文档约束 Codex / AI 编码助手在 `synapse-platform` 仓库中的行为。
+本文档约束 `synapse-platform` 整个仓库。修改模块前必须同时阅读：
+
+1. 本文件。
+2. 目标一级模块目录中的 `AGENTS.md`。
+3. 模块规则引用的专题文档。
+
+规则优先级：当前用户任务要求 > 距离目标文件最近的 `AGENTS.md` > 上级 `AGENTS.md` > 通用文档。冲突不得静默处理，最终报告必须说明。
 
 ## 1. 项目定位
 
-`Synapse Platform` 是基于 Java 21、Spring Boot、Spring Cloud、Spring Cloud Alibaba 构建的企业级微服务平台。
+Synapse Platform 是基于 Java 21、Spring Boot、Spring Cloud 和 Spring Cloud Alibaba 的企业级微服务平台。
 
-`Synapse Framework` 是独立技术基座项目，Platform 只能通过 Maven 依赖使用 Framework，禁止修改或反向依赖 Framework。
+Platform 只能通过 Maven 依赖复用相邻 `../synapse-framework`，禁止修改 Framework 或让 Framework 反向依赖 Platform。Framework 能力以其当前根 POM、`synapse-bom`、源码和模块手册为准。
 
-当前阶段只创建 Java 后端微服务骨架，不实现具体业务功能。
+## 2. 一级模块
 
-## 2. 当前平台模块
+仓库包含 Gateway、IAM、Resource、Config、Audit、File、Message、Task、Workflow、Integration、MDM、Report、Monitor 共 13 个一级模块。
 
-一级平台模块共 13 个：
-
-```text
-synapse-gateway-platform
-synapse-iam-platform
-synapse-resource-platform
-synapse-config-platform
-synapse-audit-platform
-synapse-file-platform
-synapse-message-platform
-synapse-task-platform
-synapse-workflow-platform
-synapse-integration-platform
-synapse-mdm-platform
-synapse-report-platform
-synapse-monitor-platform
-```
-
-Gateway 不拆分 api / client / server。
-
-除 Gateway 外，每个平台能力采用：
+Gateway 不拆分。其余模块采用：
 
 ```text
 synapse-xxx-platform
@@ -41,153 +27,53 @@ synapse-xxx-platform
 └── synapse-xxx-server
 ```
 
-## 3. 职责边界
+## 3. 通用分层边界
 
-`*-api`：平台微服务内部调用契约。本次只允许 POM 和源码目录，不创建 DTO、事件、错误码或接口类型。
+- `api`：稳定跨服务契约，不依赖 client/server，不包含数据库实现。
+- `client`：调用适配，允许依赖对应 api，禁止依赖 server 或直接访问服务数据库。
+- `server`：启动入口与模块实现，允许依赖对应 api，禁止依赖自己的 client 或其他模块 server。
+- 跨服务调用通过 api/client 或消息契约完成，禁止共享 Entity、Mapper、Repository。
 
-`*-client`：面向业务系统或第三方系统的 SDK。本次只允许 POM 和源码目录，不创建 Feign Client 或自动配置。
+## 4. 依赖与基线
 
-`*-server`：可独立启动的 Java 微服务。本次只允许启动类、配置文件、Flyway 目录占位，不创建 Controller、Entity、Mapper、Repository、Service、Migration 或业务代码。
+- Java 21，Maven 3.9.x。
+- 根工程 import `com.indigo.synapse:synapse-bom`；官方组件 BOM 可由 Platform 直接 import。
+- 禁止循环依赖、跨服务数据库访问和 Framework -> Platform 依赖。
+- 不得引用已从当前 Framework 删除或更名的 artifact。
+- 新增生产依赖前必须说明必要性、替代方案和影响范围。
 
-## 4. 依赖规则
+## 5. 配置与凭据
 
-允许：
+- Spring Boot 3 使用 ConfigData，不新增 `bootstrap.yml`。
+- 配置支持环境变量或外部配置中心注入，应用保持无状态。
+- 禁止提交密码、Token、Secret、私钥、真实 `.env` 或个人绝对路径。
+- 禁止在日志、异常或诊断命令中输出认证材料和完整环境变量。
 
-```text
-client -> 对应 api
-server -> 对应 api
-platform service -> synapse-framework
-```
+## 6. 修改原则
 
-禁止：
+- 修改前先搜索并阅读相关规则、设计、接口和测试文档。
+- 优先最小修改和现有结构，不进行未授权的大规模重构。
+- 不删除测试、降低断言、绕过校验或把临时实现伪装成最终能力。
+- 当前事实优先于旧 README、历史任务和规划描述。
+- 代码说明、计划、总结和自查使用中文；命名遵循项目既有习惯。
 
-```text
-api -> client
-api -> server
-client -> server
-server -> 自己的 client
-server -> 其他服务的 server
-framework -> platform
-跨服务共享 Entity / Mapper / Repository
-跨服务直接访问数据库
-循环依赖
-```
-
-根工程只 import `com.indigo.synapse:synapse-bom`。Spring Boot / Spring Cloud / Spring Cloud Alibaba 版本由 `synapse-bom` 管理。
-
-## 5. Framework 复用规则
-
-使用 Framework 能力前必须以本地 `../synapse-framework` 的根 POM、`synapse-bom`、模块手册和配置属性类为准。
-
-只允许使用已进入 Framework 根 POM reactor 且由 `synapse-bom` 管理的模块。
-
-禁止凭空创建 Framework 配置项。当前已核实可用配置项包括：
-
-```text
-synapse.cloud.*
-synapse.time.default-zone
-synapse.config.values
-synapse.i18n.*
-synapse.security.*
-synapse.oauth2.*
-synapse.file.local-root
-```
-
-`synapse-webmvc`、`synapse-webflux` 当前没有需要统一生成的复杂外部属性，禁止创建 `synapse.webmvc.*` 或 `synapse.webflux.*`。
-
-## 6. Gateway 边界
-
-`synapse-gateway-platform` 使用 Spring Cloud Gateway / WebFlux / Reactor。
-
-Gateway 禁止依赖：
-
-```text
-synapse-webmvc
-synapse-data
-spring-boot-starter-web
-spring-webmvc
-Servlet API
-任何服务的 Entity / Mapper / server 模块
-```
-
-Gateway 不访问数据库，不承载 IAM 业务逻辑。
-
-## 7. 包名与服务名
-
-Server 根包：
-
-```text
-com.indigo.synapse.{module}
-```
-
-启动类包：
-
-```text
-com.indigo.synapse.{module}.bootstrap
-```
-
-服务名必须与可启动 artifactId 一致，例如：
-
-```text
-synapse-iam-server
-synapse-resource-server
-synapse-gateway-platform
-```
-
-## 8. 配置规则
-
-每个可启动服务必须包含：
-
-```text
-application.yml
-application-dev.yml
-application-beta.yml
-application-prd.yml
-```
-
-Spring Boot 3 / Spring Cloud 配置加载使用 ConfigData 机制：
-
-```text
-spring.config.import=optional:nacos:...
-```
-
-禁止新增 `bootstrap.yml` 或 `spring-cloud-starter-bootstrap`，除非后续明确切换到旧 bootstrap 上下文模型。
-
-必须支持环境变量：
-
-```text
-NACOS_SERVER_ADDR
-NACOS_NAMESPACE
-NACOS_GROUP
-NACOS_USERNAME
-NACOS_PASSWORD
-SPRING_PROFILES_ACTIVE
-SERVER_PORT
-```
-
-配置中不得提交真实密码、Token、Secret、私钥或个人电脑路径。
-
-## 9. 禁止创建
-
-```text
-synapse-platform-bom
-synapse-platform-common
-synapse-platform-api
-synapse-i18n-platform
-synapse-notification-platform
-synapse-import-export-platform
-synapse-admin-web
-任何业务系统模块
-```
-
-## 10. 验证
-
-提交前至少运行：
+## 7. 最低验证
 
 ```bash
 mvn validate
 mvn clean test
-mvn -pl synapse-gateway-platform dependency:tree
+git diff --check
 ```
 
-Gateway 依赖树必须确认不存在 `synapse-webmvc` 和 `synapse-data`。
+模块规则可增加更严格验证。未执行的命令必须如实标记并说明原因。
+
+## 8. 完成报告
+
+必须列出修改、新增、删除文件，核心实现，验证命令和结果，未完成事项、技术债与风险点。未获用户明确授权不得自动提交。
+
+## 9. 模块和专题索引
+
+- [Gateway 模块规则](synapse-gateway-platform/AGENTS.md)
+- [Gateway 设计与安全模型](docs/gateway.md)
+- [Gateway Docker 部署](deploy/docker/gateway/README.md)
+- 其余模块规则位于对应一级模块目录的 `AGENTS.md`。

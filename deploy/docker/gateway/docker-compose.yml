@@ -1,0 +1,47 @@
+name: synapse-gateway
+
+services:
+  gateway:
+    image: ${GATEWAY_IMAGE_REPOSITORY:?GATEWAY_IMAGE_REPOSITORY is required}:${GATEWAY_IMAGE_TAG:?GATEWAY_IMAGE_TAG is required}
+    container_name: synapse-gateway
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_HOST_PORT:-20000}:${GATEWAY_CONTAINER_PORT:-20000}"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prd}
+      SERVER_PORT: ${SERVER_PORT:-20000}
+      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:?NACOS_SERVER_ADDR is required}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-prd}
+      NACOS_GROUP: ${NACOS_GROUP:-SYNAPSE_PLATFORM_PRD}
+      NACOS_USERNAME: ${NACOS_USERNAME:-}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:-}
+      IAM_ISSUER_URI: ${IAM_ISSUER_URI:?IAM_ISSUER_URI is required}
+      IAM_JWK_SET_URI: ${IAM_JWK_SET_URI:?IAM_JWK_SET_URI is required}
+      SYNAPSE_GATEWAY_AUDIENCE: ${SYNAPSE_GATEWAY_AUDIENCE:-synapse-platform}
+      GATEWAY_PROOF_ENABLED: ${GATEWAY_PROOF_ENABLED:-true}
+      GATEWAY_ID: ${GATEWAY_ID:-synapse-gateway}
+      GATEWAY_PROOF_SECRET: ${GATEWAY_PROOF_SECRET:-}
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:$${SERVER_PORT}/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    stop_grace_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+    networks:
+      - synapse-platform-network
+
+networks:
+  synapse-platform-network:
+    name: synapse-platform-network
+    driver: bridge
