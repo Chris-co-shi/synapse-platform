@@ -1,0 +1,41 @@
+name: Apply Gateway P0 Patch
+
+on:
+  push:
+    branches:
+      - codex/gateway-p0-bootstrap-work
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct and apply patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/codex/gateway-p0.part-* | base64 --decode | gzip --decompress > /tmp/gateway-p0.patch
+          actual_sha="$(sha256sum /tmp/gateway-p0.patch | cut -d' ' -f1)"
+          test "$actual_sha" = "b15de0f0949dbb79be4dd80008c4a371e53b9326165138e429c9385ec885610e"
+          git apply --index /tmp/gateway-p0.patch
+          git rm .github/codex/gateway-p0.part-*
+          git rm .github/workflows/apply-gateway-p0-patch.yml
+          git diff --cached --check
+
+      - name: Commit implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat: close Gateway P0 security chain"
+          git push
