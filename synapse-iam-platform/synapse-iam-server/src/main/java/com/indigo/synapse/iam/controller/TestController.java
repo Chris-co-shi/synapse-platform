@@ -1,4 +1,4 @@
-package com.indigo.synapse.iam.bootstrap.controller;
+package com.indigo.synapse.iam.controller;
 
 import com.indigo.synapse.web.core.response.Result;
 import org.springframework.web.bind.annotation.GetMapping;

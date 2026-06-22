@@ -6,7 +6,7 @@ Synapse Platform 是基于 Java 21、Spring Boot、Spring Cloud 和 Spring Cloud
 
 - 已建立 13 个一级平台模块。
 - Gateway 已实现 Reactive JWT 入口认证、明确白名单和默认保护策略。
-- Gateway 会清理外部 `X-Synapse-Gateway-*` Header，并为最终下游请求签发 GatewayProof。
+- Gateway 会始终清理外部 `X-Synapse-Gateway-*` Header，并按 Framework 协议为最终下游请求签发 GatewayProof。
 - Gateway 提供 Java 21 非 root 镜像、Docker Compose 部署、健康检查和失败回滚。
 - 其他平台模块仍处于不同建设阶段；全仓 POM 已移除当前 Framework 不再提供的 artifact，并按现有代码需要直接声明 Spring Cloud Alibaba 组件。
 
@@ -71,6 +71,22 @@ mvn -f synapse-gateway-platform/pom.xml spring-boot:run
 
 开发环境默认关闭 GatewayProof 签发，但仍清理所有外部 Gateway Header。beta/prd 默认开启，必须安全注入至少 32 字节 secret。
 
+Gateway Docker 镜像使用 Java 21 JRE、非 root 用户和最小运行 context。构建及 Compose 部署入口：
+
+```bash
+./scripts/docker/build-gateway-image.sh \
+  --repository registry.example.com/synapse/synapse-gateway \
+  --tag 0.1.0 \
+  --platform linux/amd64
+
+./scripts/docker/deploy-gateway.sh \
+  --repository registry.example.com/synapse/synapse-gateway \
+  --tag 0.1.0 \
+  --env-file deploy/docker/gateway/.env
+```
+
+完整配置、回滚和单实例限制见 [Gateway Docker 部署](deploy/docker/gateway/README.md)。
+
 ## 开发规范
 
 - [仓库级开发规则](AGENTS.md)
@@ -92,6 +108,7 @@ mvn -f synapse-gateway-platform/pom.xml spring-boot:run
 
 - [产品设计](docs/01-产品设计.md)
 - [模块边界与服务设计](docs/02-模块边界与服务设计.md)
+- [IAM 架构与阶段规划](docs/iam.md)
 - [Gateway 设计与安全模型](docs/gateway.md)
 - [Gateway Docker 部署](deploy/docker/gateway/README.md)
 

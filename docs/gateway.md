@@ -111,6 +111,11 @@ bearer_token_sha256
 
 任何外部 `X-Synapse-Gateway-*` Header 都不可信。过滤器通过 Framework 的大小写不敏感判断删除全部同前缀 Header，包括未来尚未定义的字段。即使 `GATEWAY_PROOF_ENABLED=false` 也继续清理，防止开发配置让客户端伪造下游信任边界。
 
+清理与签名由两个独立 GlobalFilter 承担：
+
+- `GatewayProofHeaderSanitizationGlobalFilter` 固定 order `Ordered.HIGHEST_PRECEDENCE`，始终存在。
+- `GatewayProofSigningGlobalFilter` 固定 order `10001`，关闭证明时直接继续链路。
+
 ### 4.2 最终路径绑定
 
 过滤器顺序位于路由级 `StripPrefix` 和 `RouteToRequestUrlFilter` 之后、Netty 网络转发之前。因此签名绑定最终下游路径，而不是外部路径：
@@ -124,12 +129,32 @@ StripPrefix 后：GET /test?b=2&a=1
 
 如果错误地使用 `/iam/test` 验签，Framework verifier 会返回签名无效。顺序由集成测试保护。
 
+当前 Spring Cloud Gateway 4.3.4 中，`StripPrefix` 默认 order 为 `0`，`RouteToRequestUrlFilter` 为
+`10000`，`NettyRoutingFilter` 为 `Ordered.LOWEST_PRECEDENCE`。签名 order `10001` 因此位于路径改写和
+请求 URL 建立之后、网络转发之前。该顺序属于安全协议，升级 Gateway 版本时必须复核并运行最终路径集成测试。
+
 ### 4.3 环境策略
 
 - `dev` 默认关闭证明，可不提供 secret，但仍清理 Header。
 - `beta`、`prd` 默认开启证明。
 - 开启时 gateway-id 不能为空，secret 必须至少 32 UTF-8 字节；否则启动失败。
 - Gateway 是证明签发方，不启用 `synapse.security.gateway-proof.enabled` 入站验证。
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `synapse.gateway.proof.enabled` | `false` | 是否签发出站 GatewayProof；不影响 Header 清理 |
+| `synapse.gateway.proof.gateway-id` | `synapse-gateway` | 下游信任的 Gateway 稳定标识 |
+| `synapse.gateway.proof.secret` | 空 | HMAC secret；启用时必须满足 Framework 至少 32 UTF-8 字节规则 |
+
+secret 只能通过环境变量或 Secret 管理系统注入，不得写入仓库、镜像、日志或异常。初始化、nonce、
+canonical request 或签名任一失败时，Gateway 以 500 失败关闭，不允许无证明转发；日志只记录错误类型、
+routeId、method 和 path，不记录 Token、token hash、secret、canonical string、signature 或完整 nonce。
+
+### 4.4 当前限制
+
+- GatewayProof v1 使用单个共享 HMAC secret，当前没有密钥轮换或多版本签发能力。
+- Gateway 只负责签发，不在本模块实现下游 replay store；下游按 Framework 验证窗口和实际 replay store 负责防重放。
+- GatewayProof 不解决服务间任意调用签名，也不替代 mTLS、JWT 或业务授权。
 
 ## 5. 静态路由
 
@@ -228,3 +253,18 @@ curl -i -H 'Authorization: Bearer <access-token>' \
 ## 11. Kubernetes 后续边界
 
 当前没有 Kubernetes YAML 或 Helm。Gateway 已保持无状态、环境变量配置、stdout/stderr 日志、readiness/liveness 端点和 SIGTERM 优雅停机，后续可映射 Deployment、Service、ConfigMap、Secret 及 probes。迁移任务应独立设计，不在本任务伪称已实现。
+
+## 12. Docker 运行与部署边界
+
+Gateway 提供 Java 21 JRE runtime-only 镜像和 Docker Compose v2 单实例部署，详细操作见
+[Gateway Docker 部署](../deploy/docker/gateway/README.md)。容器使用固定 UID/GID 的非 root 用户，配置完全由
+环境注入，日志写入 stdout/stderr，不保存业务数据、源码或构建凭据。
+
+- liveness：`/actuator/health/liveness`。
+- readiness：`/actuator/health/readiness`，同时作为 Compose healthcheck。
+- 优雅停机：Spring shutdown phase 30 秒，Compose stop grace period 40 秒。
+- GatewayProof secret 只能由服务器受限环境文件或 Secret 系统注入，不进入镜像、label 或日志。
+- Compose 当前只有单 Gateway 实例，镜像替换可能短暂中断；真正无中断需要多实例负载均衡或 Kubernetes Deployment。
+
+容器模型已保持与未来 Deployment、Service、ConfigMap、Secret、readinessProbe、livenessProbe 和
+terminationGracePeriodSeconds 的自然映射，但当前任务不创建任何 Kubernetes 或 Helm 文件。

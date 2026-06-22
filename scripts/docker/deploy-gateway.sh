@@ -1,44 +1,93 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# 部署脚本只更新 Gateway 服务，健康失败时回滚到部署前版本，不影响同机其他容器。
+# 部署脚本只更新 Compose 中的 Gateway 服务；失败时最多执行一次回滚。
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPOSITORY_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-readonly DEPLOY_DIR="${REPOSITORY_ROOT}/deploy/docker/gateway"
-readonly COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
-readonly ENV_FILE="${DEPLOY_DIR}/.env"
-readonly RELEASE_DIR="${DEPLOY_DIR}/.release"
-readonly CONTAINER_NAME="synapse-gateway"
-readonly HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-180}"
+readonly DEFAULT_DEPLOY_DIR="${REPOSITORY_ROOT}/deploy/docker/gateway"
+
+TARGET_REPOSITORY=""
+TARGET_TAG=""
+ENV_FILE="${DEFAULT_DEPLOY_DIR}/.env"
+COMPOSE_FILE="${DEFAULT_DEPLOY_DIR}/docker-compose.yml"
+RELEASE_DIR="${DEFAULT_DEPLOY_DIR}/.release"
+HEALTH_TIMEOUT_SECONDS="180"
+AUTO_ROLLBACK=true
+SKIP_PULL=false
+EFFECTIVE_PULL_POLICY=always
+
+log_info() {
+    printf '[INFO] %s\n' "$*"
+}
+
+log_warn() {
+    printf '[WARN] %s\n' "$*" >&2
+}
+
+die() {
+    printf '[ERROR] %s\n' "$*" >&2
+    exit 1
+}
 
 usage() {
-    echo "用法: $0 <image-repository> <image-tag>" >&2
+    cat <<'USAGE'
+用法:
+  deploy-gateway.sh --repository <repository> --tag <tag> --env-file <file> [选项]
+
+必填参数:
+  --repository <repository>  目标镜像 repository
+  --tag <tag>                目标镜像 tag，禁止 latest
+  --env-file <file>          服务器环境文件
+
+可选参数:
+  --compose-file <file>      Compose 文件，默认 deploy/docker/gateway/docker-compose.yml
+  --timeout <seconds>        等待 healthy 的超时秒数，默认 180
+  --no-auto-rollback         新版本失败时不自动回滚
+  --skip-pull                仅离线/本地演练使用，不拉取 Registry 镜像
+  -h, --help                 显示帮助
+USAGE
 }
 
 require_command() {
-    local command_name="$1"
-    command -v "${command_name}" >/dev/null 2>&1 || {
-        echo "错误: 缺少命令 ${command_name}" >&2
-        exit 1
-    }
+    command -v "$1" >/dev/null 2>&1 || die "缺少命令: $1"
 }
 
-# 只判断变量是否存在非空值，不输出值，避免日志泄漏密码或 GatewayProof secret。
-require_env_value() {
-    local key="$1"
-    grep -Eq "^[[:space:]]*${key}=[^[:space:]].*$" "${ENV_FILE}" || {
-        echo "错误: ${ENV_FILE} 缺少必要变量 ${key}" >&2
-        exit 1
-    }
+validate_repository() {
+    [[ -n $1 && $1 != *://* && $1 != *@* && $1 != *[[:space:]]* ]] \
+        || die "image repository 格式非法"
+    [[ $1 =~ ^[a-z0-9]+([._-][a-z0-9]+)*([:/][a-z0-9]+([._-][a-z0-9]+)*)*$ ]] \
+        || die "image repository 只能使用标准小写 OCI repository 格式"
 }
 
+validate_tag() {
+    [[ $1 =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || die "image tag 格式非法"
+    [[ $(printf '%s' "$1" | tr '[:upper:]' '[:lower:]') != latest ]] || die "禁止部署 latest"
+}
+
+# 读取 dotenv 单值但不执行文件，避免注入命令或打印 secret。
 read_env_value() {
     local key="$1"
-    awk -F= -v key="${key}" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "${ENV_FILE}"
+    awk -v key="${key}" '
+        $0 ~ "^[[:space:]]*(export[[:space:]]+)?" key "[[:space:]]*=" {
+            line=$0
+            sub("^[[:space:]]*(export[[:space:]]+)?" key "[[:space:]]*=[[:space:]]*", "", line)
+            sub("[[:space:]]*$", "", line)
+            if ((substr(line,1,1) == "\"" && substr(line,length(line),1) == "\"") ||
+                (substr(line,1,1) == "\047" && substr(line,length(line),1) == "\047")) {
+                line=substr(line,2,length(line)-2)
+            }
+            print line
+            exit
+        }
+    ' "${ENV_FILE}"
 }
 
-# 同目录临时文件加 rename，避免部署进程中断留下半写状态。
-write_state_atomically() {
+require_env_value() {
+    [[ -n $(read_env_value "$1") ]] || die "环境文件缺少必要变量: $1"
+}
+
+# 状态文件只保存完整镜像引用，并通过同目录 rename 原子替换。
+write_release_state() {
     local name="$1"
     local value="$2"
     local temporary
@@ -48,98 +97,176 @@ write_state_atomically() {
     mv -f "${temporary}" "${RELEASE_DIR}/${name}"
 }
 
+compose() {
+    GATEWAY_IMAGE_REPOSITORY="${TARGET_REPOSITORY}" \
+    GATEWAY_IMAGE_TAG="${TARGET_TAG}" \
+    GATEWAY_PULL_POLICY="${EFFECTIVE_PULL_POLICY}" \
+        docker compose --env-file "${ENV_FILE}" --file "${COMPOSE_FILE}" "$@"
+}
+
+gateway_container_id() {
+    compose ps --quiet gateway 2>/dev/null || true
+}
+
 current_running_image() {
-    if docker inspect "${CONTAINER_NAME}" >/dev/null 2>&1; then
-        docker inspect --format '{{.Config.Image}}' "${CONTAINER_NAME}"
-    elif [[ -s "${RELEASE_DIR}/current" ]]; then
+    local container_id
+    container_id="$(gateway_container_id)"
+    if [[ -n ${container_id} ]]; then
+        docker inspect --format '{{.Config.Image}}' "${container_id}" 2>/dev/null || true
+    elif [[ -s ${RELEASE_DIR}/current ]]; then
         head -n 1 "${RELEASE_DIR}/current"
     fi
 }
 
-# 仅读取健康状态，不输出 docker inspect 的环境变量快照。
-wait_until_healthy() {
+# 轮询容器健康状态；unhealthy、exited、dead 和 missing 立即失败。
+wait_for_health() {
     local deadline=$((SECONDS + HEALTH_TIMEOUT_SECONDS))
-    local status="unknown"
+    local status="missing"
+    local container_id=""
     while (( SECONDS < deadline )); do
-        status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \
-            "${CONTAINER_NAME}" 2>/dev/null || printf 'missing')"
-        if [[ ${status} == "healthy" ]]; then
-            return 0
+        container_id="$(gateway_container_id)"
+        if [[ -n ${container_id} ]]; then
+            status="$(docker inspect --format \
+                '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \
+                "${container_id}" 2>/dev/null || printf 'missing')"
+        else
+            status="missing"
         fi
-        if [[ ${status} == "exited" || ${status} == "dead" || ${status} == "missing" ]]; then
-            break
-        fi
+        case "${status}" in
+            healthy)
+                return 0
+                ;;
+            unhealthy|exited|dead)
+                log_warn "Gateway 健康等待提前失败，状态: ${status}"
+                return 1
+                ;;
+        esac
         sleep 3
     done
-    echo "错误: Gateway 未在 ${HEALTH_TIMEOUT_SECONDS}s 内进入 healthy，当前状态: ${status}" >&2
+    log_warn "Gateway 未在 ${HEALTH_TIMEOUT_SECONDS}s 内进入 healthy，当前状态: ${status}"
     return 1
 }
 
-compose() {
-    GATEWAY_IMAGE_REPOSITORY="${TARGET_REPOSITORY}" \
-    GATEWAY_IMAGE_TAG="${TARGET_TAG}" \
-        docker compose --env-file "${ENV_FILE}" --file "${COMPOSE_FILE}" "$@"
+print_failure_diagnostics() {
+    log_warn "Gateway 部署诊断（不包含 inspect 环境变量）"
+    compose ps gateway >&2 || true
+    compose logs --no-color --tail 80 gateway >&2 || true
 }
 
 main() {
-    if [[ $# -ne 2 ]]; then
-        usage
-        exit 2
-    fi
-    TARGET_REPOSITORY="$1"
-    TARGET_TAG="$2"
-    export TARGET_REPOSITORY TARGET_TAG
-    if [[ -z ${TARGET_REPOSITORY} || -z ${TARGET_TAG} || ${TARGET_TAG} == "latest" ]]; then
-        echo "错误: repository/tag 不能为空，且禁止部署 latest" >&2
-        exit 2
-    fi
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --repository)
+                [[ $# -ge 2 ]] || die "--repository 缺少值"
+                TARGET_REPOSITORY="$2"
+                shift 2
+                ;;
+            --tag)
+                [[ $# -ge 2 ]] || die "--tag 缺少值"
+                TARGET_TAG="$2"
+                shift 2
+                ;;
+            --env-file)
+                [[ $# -ge 2 ]] || die "--env-file 缺少值"
+                ENV_FILE="$2"
+                shift 2
+                ;;
+            --compose-file)
+                [[ $# -ge 2 ]] || die "--compose-file 缺少值"
+                COMPOSE_FILE="$2"
+                shift 2
+                ;;
+            --timeout)
+                [[ $# -ge 2 ]] || die "--timeout 缺少值"
+                HEALTH_TIMEOUT_SECONDS="$2"
+                shift 2
+                ;;
+            --no-auto-rollback)
+                AUTO_ROLLBACK=false
+                shift
+                ;;
+            --skip-pull)
+                SKIP_PULL=true
+                EFFECTIVE_PULL_POLICY=never
+                shift
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                die "未知参数: $1"
+                ;;
+        esac
+    done
+
+    validate_repository "${TARGET_REPOSITORY}"
+    validate_tag "${TARGET_TAG}"
+    [[ ${HEALTH_TIMEOUT_SECONDS} =~ ^[1-9][0-9]*$ ]] || die "--timeout 必须为正整数"
+    [[ -f ${ENV_FILE} ]] || die "未找到环境文件: ${ENV_FILE}"
+    [[ -f ${COMPOSE_FILE} ]] || die "未找到 Compose 文件: ${COMPOSE_FILE}"
+    ENV_FILE="$(cd -- "$(dirname -- "${ENV_FILE}")" && pwd)/$(basename -- "${ENV_FILE}")"
+    COMPOSE_FILE="$(cd -- "$(dirname -- "${COMPOSE_FILE}")" && pwd)/$(basename -- "${COMPOSE_FILE}")"
+    RELEASE_DIR="$(cd -- "$(dirname -- "${COMPOSE_FILE}")" && pwd)/.release"
 
     require_command docker
-    [[ -f ${ENV_FILE} ]] || {
-        echo "错误: 未找到 ${ENV_FILE}；请先从 .env.example 创建" >&2
-        exit 1
-    }
+    docker info >/dev/null 2>&1 || die "Docker daemon 不可用"
+    docker compose version >/dev/null 2>&1 || die "需要 Docker Compose v2"
     for key in SPRING_PROFILES_ACTIVE SERVER_PORT NACOS_SERVER_ADDR IAM_ISSUER_URI \
         IAM_JWK_SET_URI SYNAPSE_GATEWAY_AUDIENCE GATEWAY_PROOF_ENABLED GATEWAY_ID; do
         require_env_value "${key}"
     done
-    if [[ $(read_env_value GATEWAY_PROOF_ENABLED) == "true" ]]; then
+    if [[ $(printf '%s' "$(read_env_value GATEWAY_PROOF_ENABLED)" | tr '[:upper:]' '[:lower:]') == true ]]; then
         require_env_value GATEWAY_PROOF_SECRET
     fi
-    local container_port server_port
-    container_port="$(read_env_value GATEWAY_CONTAINER_PORT)"
-    server_port="$(read_env_value SERVER_PORT)"
-    if [[ -n ${container_port} && ${container_port} != "${server_port}" ]]; then
-        echo "错误: GATEWAY_CONTAINER_PORT 必须与 SERVER_PORT 一致" >&2
-        exit 1
-    fi
+    compose config --quiet >/dev/null || die "Compose 配置校验失败"
 
     local target_image previous_image=""
     target_image="${TARGET_REPOSITORY}:${TARGET_TAG}"
-    previous_image="$(current_running_image || true)"
-    compose pull gateway
+    previous_image="$(current_running_image)"
+    if [[ -n ${previous_image} && ${previous_image} != "${target_image}" ]]; then
+        write_release_state previous "${previous_image}"
+    fi
+
+    if [[ ${SKIP_PULL} == true ]]; then
+        log_warn "已启用 --skip-pull，仅适用于本地或离线演练"
+        docker image inspect "${target_image}" >/dev/null 2>&1 \
+            || die "本地不存在目标镜像: ${target_image}"
+    else
+        compose pull gateway
+    fi
     compose up --detach --no-deps gateway
 
-    if ! wait_until_healthy; then
-        compose ps gateway >&2 || true
-        if [[ -n ${previous_image} && ${previous_image} != "${target_image}" ]]; then
-            echo "部署失败，开始回滚到上一已知版本。" >&2
-            "${SCRIPT_DIR}/rollback-gateway.sh" "${previous_image}" || true
+    if ! wait_for_health; then
+        print_failure_diagnostics
+        if [[ ${AUTO_ROLLBACK} == true && -n ${previous_image} && ${previous_image} != "${target_image}" ]]; then
+            log_warn "新版本部署失败，开始单次自动回滚到上一版本"
+            local -a rollback_args=(
+                --image "${previous_image}"
+                --env-file "${ENV_FILE}"
+                --compose-file "${COMPOSE_FILE}"
+                --timeout "${HEALTH_TIMEOUT_SECONDS}"
+                --preserve-previous
+            )
+            [[ ${SKIP_PULL} == true ]] && rollback_args+=(--skip-pull)
+            if "${SCRIPT_DIR}/rollback-gateway.sh" "${rollback_args[@]}"; then
+                log_warn "上一版本已恢复 healthy；新版本发布仍判定失败"
+            else
+                log_warn "自动回滚失败，保留当前容器和镜像用于排查"
+            fi
+        elif [[ ${AUTO_ROLLBACK} != true ]]; then
+            log_warn "调用者已禁用自动回滚"
         else
-            echo "部署失败，且不存在可用的上一版本。" >&2
+            log_warn "不存在可用的上一版本，无法自动回滚"
         fi
         exit 1
     fi
 
-    if [[ -n ${previous_image} && ${previous_image} != "${target_image}" ]]; then
-        write_state_atomically previous "${previous_image}"
-    fi
-    write_state_atomically current "${target_image}"
-    echo "Gateway 部署成功"
-    echo "容器: ${CONTAINER_NAME}"
-    echo "镜像: ${target_image}"
-    echo "健康状态: healthy"
-    echo "部署时间: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+    write_release_state current "${target_image}"
+    log_info "Gateway 部署成功"
+    log_info "镜像: ${target_image}"
+    log_info "健康状态: healthy"
+    log_info "部署时间: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 }
 
 main "$@"

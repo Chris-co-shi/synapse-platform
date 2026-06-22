@@ -1,173 +1,209 @@
 # Synapse Gateway Docker 部署
 
-本目录提供 Linux Server + Docker Engine + Docker Compose v2 的单机或少量服务器部署方案。它不是 Kubernetes 部署，也不提供 Kubernetes 式 RollingUpdate。
+本目录提供 Linux Server、Docker Engine 和 Docker Compose v2 的单 Gateway 实例部署方案。它不是
+Kubernetes 部署，也不提供 Kubernetes 式滚动更新。
 
-## 1. 前置条件
+## 1. 部署模型与前置条件
 
-- Linux 服务器，Docker Engine 与 `docker compose` v2。
-- 可访问 OCI Registry、Nacos 和 IAM JWK 地址。
-- 服务器时间已同步；GatewayProof 时间窗口依赖准确时钟。
-- Registry 已完成登录，服务器部署目录包含本目录和 `scripts/docker`。
-- beta/prd 使用至少 32 UTF-8 字节的 `GATEWAY_PROOF_SECRET`。
+- Linux Server、Docker Engine、Docker Compose v2。
+- 构建机使用 Java 21、Maven 3.8.6+、Docker buildx；运行服务器不需要安装 Java。
+- 服务器可访问 OCI Registry、Nacos、IAM issuer/JWK，且已完成 Registry 登录。
+- 服务器时间同步；GatewayProof 验签窗口依赖准确时钟。
+- 根据流量和 `JAVA_TOOL_OPTIONS` 预留足够内存及磁盘。
+- Platform 依赖的 Framework 构件已能由 Maven 本地仓库或配置的远程仓库解析。
 
-应用无状态，不挂载业务数据、源码、Maven settings 或 Docker socket。日志写入 stdout/stderr。
+应用无状态，不挂载源码、Maven settings、SSH key、Registry 凭据或 Docker socket。配置从环境文件注入，
+日志写入 stdout/stderr。
 
 ## 2. 构建镜像
 
-构建机先安装本地 Framework，再由脚本构建 Gateway JAR 和镜像：
+默认构建并执行 Gateway 测试，目标平台为 `linux/amd64`：
 
 ```bash
-cd ../synapse-framework
-mvn clean install
-cd ../synapse-platform
-
+MVN_BIN=/path/to/mvn \
 ./scripts/docker/build-gateway-image.sh \
-  registry.example.com/synapse/synapse-gateway \
-  0.1.0
+  --repository registry.example.com/synapse/synapse-gateway \
+  --tag 0.1.0 \
+  --platform linux/amd64
 ```
 
-脚本使用 Gateway 子 POM执行定向 Maven 构建，验证唯一 Spring Boot 可执行 JAR，再交给模块 Dockerfile。也可以手工执行：
+脚本执行 `mvn -pl synapse-gateway-platform -am clean package`，确认唯一 Spring Boot 可执行 JAR，复制到
+临时最小 Docker context，再执行 buildx。`*.original`、sources、javadoc 和 tests JAR 不会被选中。
+
+只有调用者明确指定时才跳过测试：
 
 ```bash
-mvn -f synapse-gateway-platform/pom.xml clean package
-docker build \
-  --platform linux/amd64 \
-  --build-arg JAR_FILE=synapse-gateway-platform/target/synapse-gateway-platform-0.1.0-SNAPSHOT.jar \
-  -f synapse-gateway-platform/Dockerfile \
-  -t synapse-gateway-platform:test .
-```
-
-镜像使用 `eclipse-temurin:21-jre-alpine`、固定非 root UID/GID `10001` 和 `/opt/synapse/application.jar`。Alpine 自带 BusyBox `wget`，Compose 用它探测 readiness，无需为健康检查安装 curl。`JAVA_TOOL_OPTIONS` 由 JVM 原生读取；不要把堆大小、时区、代理或调试端口硬编码进镜像。
-
-## 3. CPU 架构
-
-脚本默认 `DOCKER_PLATFORM=linux/amd64`，适配常见 Linux AMD64 服务器。Apple Silicon 本地直接构建常产生 `linux/arm64`，不能部署到只支持 AMD64 的服务器。
-
-```bash
-DOCKER_PLATFORM=linux/amd64 ./scripts/docker/build-gateway-image.sh registry.example.com/synapse/synapse-gateway 0.1.0
-```
-
-ARM64 服务器可显式设置 `DOCKER_PLATFORM=linux/arm64`。生产 tag 必须明确且不可变，脚本拒绝 `latest`。
-
-## 4. 发布镜像
-
-脚本不处理登录和密码：
-
-```bash
-docker login registry.example.com
 ./scripts/docker/build-gateway-image.sh \
-  registry.example.com/synapse/synapse-gateway 0.1.0 --push
+  --repository registry.example.com/synapse/synapse-gateway \
+  --tag 0.1.0-test \
+  --skip-tests
 ```
 
-Registry 凭据不得写入仓库、Dockerfile、构建参数或部署脚本。
+脚本会醒目标记跳过测试和 dirty workspace，但不会修改、暂存或提交工作区。
 
-## 5. 首次部署
+### 2.1 Runtime 镜像
+
+- 基础镜像：`eclipse-temurin:21.0.11_10-jre-jammy`，并固定多架构 manifest digest；Java 21 JRE、Ubuntu Jammy/glibc。
+- 非 root 用户：`synapse`，固定 UID/GID `10001`。
+- 工作目录：`/opt/synapse`；JAR：`/opt/synapse/application.jar`。
+- 入口：exec form `java -jar /opt/synapse/application.jar`。
+- 基础镜像自带 `curl`，用于 Compose readiness 探测；不额外安装软件，也不包含 Maven、Git、JDK 或源码。
+- OCI labels 包含 title、description、version、revision、created、source。
+
+`JAVA_TOOL_OPTIONS` 由 JVM 原生读取，不在镜像中固定堆、GC、时区、代理或调试参数。
+
+## 3. 多架构与 Push
+
+Apple Silicon 通常为 `linux/arm64`，常见 Linux 服务器为 `linux/amd64`。直接按本机构架构构建可能导致服务器
+出现 `exec format error`，应始终明确目标平台。
+
+单平台本地构建使用 buildx `--load`；多平台镜像不能同时 `--load`，必须推送到 Registry：
+
+```bash
+./scripts/docker/build-gateway-image.sh \
+  --repository registry.example.com/synapse/synapse-gateway \
+  --tag 0.1.0 \
+  --platform linux/amd64,linux/arm64 \
+  --push
+```
+
+单平台也可使用 `--push`。脚本不会执行 `docker login`、读取密码或保存 Registry Token；运维人员必须预先登录。
+生产 tag 必须变化且不可变，不得重复覆盖或使用 `latest`。
+
+## 4. 首次部署
+
+将仓库中的 `deploy/docker/gateway` 和 `scripts/docker` 保持相对目录复制到服务器，然后：
 
 ```bash
 cp deploy/docker/gateway/.env.example deploy/docker/gateway/.env
 chmod 600 deploy/docker/gateway/.env
 ```
 
-编辑 `.env`，至少配置镜像、Nacos、IAM issuer/JWK、audience 和 GatewayProof。真实 `.env` 已被 `.gitignore`/`.dockerignore` 排除。`GATEWAY_CONTAINER_PORT` 必须与 `SERVER_PORT` 一致。
+编辑 `.env`，填写镜像、Nacos、IAM、audience 和 GatewayProof。至少 32 UTF-8 字节的
+`GATEWAY_PROOF_SECRET` 必须通过服务器受限文件或后续 Secret 管理系统注入，不得写入镜像、命令参数或 Git。
 
-先检查 Compose：
+确认 Registry 登录和可配置 Docker 网络后解析 Compose：
 
 ```bash
 docker compose \
   --env-file deploy/docker/gateway/.env \
-  -f deploy/docker/gateway/docker-compose.yml \
+  --file deploy/docker/gateway/docker-compose.yml \
   config --quiet
 ```
 
-部署：
+执行部署：
 
 ```bash
 ./scripts/docker/deploy-gateway.sh \
-  registry.example.com/synapse/synapse-gateway 0.1.0
+  --repository registry.example.com/synapse/synapse-gateway \
+  --tag 0.1.0 \
+  --env-file deploy/docker/gateway/.env
 ```
 
-脚本拉取并仅更新 `gateway` 服务，等待容器 `healthy`，成功后输出容器、镜像、健康状态和 UTC 部署时间。
+脚本验证 Docker/Compose、必填配置和 GatewayProof secret，拉取目标镜像，仅更新 `gateway` 服务，轮询容器
+健康状态，成功后原子更新 `.release/current`。不会打印 `.env`、完整 inspect 环境或 secret。
 
-## 6. 健康、日志与停机
+## 5. 健康检查与优雅停机
 
-- healthcheck：`/actuator/health/readiness`。
-- liveness：可通过 `/actuator/health/liveness` 供外部监控使用。
-- 启动缓冲：45 秒；间隔 15 秒；超时 5 秒；重试 5 次。
-- Spring 优雅停机阶段：30 秒；Compose `stop_grace_period`：40 秒。
-- 重启策略：`unless-stopped`。
-- 日志：Docker `json-file`，单文件 100 MB，保留 5 个。
-- 安全：非 root、`no-new-privileges`、删除全部 Linux capabilities，不使用 privileged。
+- 普通 health：`/actuator/health`。
+- liveness：`/actuator/health/liveness`，用于判断进程是否仍应运行。
+- readiness：`/actuator/health/readiness`，用于判断是否可接收流量，也是 Compose healthcheck 目标。
+- healthcheck：间隔 10 秒、超时 5 秒、重试 12 次、启动缓冲 40 秒。
+- Spring shutdown phase：30 秒；Compose `stop_grace_period`：40 秒。
 
-查看非敏感状态和日志：
+健康端点可匿名访问，但仅暴露 `health,info`，不会公开 `env` 或 `configprops`。liveness 不绑定短期外部依赖，
+避免 Nacos/IAM 短暂抖动造成无限重启；readiness 反映应用接流量能力。
+
+手工检查：
 
 ```bash
-docker compose --env-file deploy/docker/gateway/.env -f deploy/docker/gateway/docker-compose.yml ps
-docker logs --tail 100 synapse-gateway
+curl -fsS http://127.0.0.1:20000/actuator/health
+curl -fsS http://127.0.0.1:20000/actuator/health/liveness
+curl -fsS http://127.0.0.1:20000/actuator/health/readiness
+docker compose --env-file deploy/docker/gateway/.env \
+  -f deploy/docker/gateway/docker-compose.yml ps
+docker compose --env-file deploy/docker/gateway/.env \
+  -f deploy/docker/gateway/docker-compose.yml logs --tail 100 gateway
 ```
 
-日志中不得输出 Token、GatewayProof secret、canonical string 或完整环境变量。
+## 6. 更新与自动回滚
 
-## 7. 更新与自动回滚
+发布新 tag 后再次调用部署脚本。部署开始前，当前运行镜像写入 `.release/previous`；只有新容器进入
+`healthy` 后才写入 `.release/current`。`unhealthy`、`exited`、`dead` 或超时会触发一次自动回滚。
 
-再次执行部署脚本即可更新。脚本在 `.release/current` 和 `.release/previous` 中原子保存完整镜像引用，不保存凭据或环境变量。
+回滚成功后，新版本部署命令仍返回非零，明确表示新版本发布失败。回滚失败不会递归回滚，也不会删除当前、
+历史或失败镜像。可使用 `--no-auto-rollback` 禁用自动回滚，或用 `--timeout 300` 调整等待时间。
 
-健康检查失败时：
+`.release` 只保存完整镜像引用，不保存环境变量或 secret，并已被 Git 忽略。
 
-1. 输出容器的非敏感状态。
-2. 如存在部署前镜像，调用回滚脚本执行一次回滚。
-3. 返回非零退出码，保留失败镜像用于排查。
+## 7. 手工回滚
 
-脚本不会执行 `docker system prune`、`compose down -v`，不会删除历史镜像或停止其他服务。
-
-## 8. 手工回滚
-
-回滚到记录的 previous：
+回滚到 `.release/previous`：
 
 ```bash
-./scripts/docker/rollback-gateway.sh
+./scripts/docker/rollback-gateway.sh \
+  --env-file deploy/docker/gateway/.env
 ```
 
-回滚到明确 tag 或完整镜像：
+指定 tag 或完整镜像：
 
 ```bash
-./scripts/docker/rollback-gateway.sh 0.1.0
-./scripts/docker/rollback-gateway.sh registry.example.com/synapse/synapse-gateway:0.1.0
+./scripts/docker/rollback-gateway.sh 0.0.9 \
+  --env-file deploy/docker/gateway/.env
+
+./scripts/docker/rollback-gateway.sh \
+  --image registry.example.com/synapse/synapse-gateway:0.0.9 \
+  --env-file deploy/docker/gateway/.env
 ```
 
-回滚同样等待 `healthy`，失败时返回非零，不递归回滚，也不删除当前失败镜像。
+回滚同样拉取镜像、等待 healthy 并更新 current。失败返回非零，保留容器和镜像用于排查。
 
-## 9. 单实例更新限制
+## 8. 单实例限制
 
-Docker Compose 单实例替换容器会产生短暂中断。当前脚本没有伪装成零停机滚动发布。需要无中断更新时，应使用多实例配合上层负载均衡，或在后续任务迁移 Kubernetes Deployment。
+Docker Compose 单 Gateway 实例更新可能产生短暂中断，本方案没有伪装成 Kubernetes 式 RollingUpdate。
+真正无中断需要两个以上 Gateway 实例配合上层负载均衡，或迁移 Kubernetes Deployment。
+
+## 9. 配置与安全
+
+- `.env` 必须权限受限且不得提交；`.env.example` 只包含占位值。
+- `NACOS_PASSWORD`、`GATEWAY_PROOF_SECRET` 和 Registry 凭据不得出现在日志、label 或命令参数。
+- 容器使用非 root、`no-new-privileges`、drop all capabilities 和独立 tmpfs `/tmp`。
+- 不启用 privileged，不挂载 Docker socket、源码、Maven settings、SSH key 或业务数据。
+- 日志使用 Docker `json-file`，单文件 100 MB、保留 5 个。
+- 当前 Compose 使用服务器文件注入；迁移 Kubernetes 后应拆分为 ConfigMap 与 Secret。
 
 ## 10. 故障排查
 
 | 现象 | 检查项 |
 | --- | --- |
-| 镜像拉取失败 | Registry 地址、tag、网络和 `docker login` 是否有效 |
-| 容器启动失败 | `docker compose ps`、应用日志、JVM 内存与 CPU 架构 |
-| readiness 失败 | `SERVER_PORT` 与容器端口、IAM JWK、Nacos、启动时间 |
-| Nacos 不可用 | 地址、namespace、group、用户名密码和网络策略 |
-| JWT 全部 401 | issuer、JWK、audience、时间同步和 Token 必填 claim |
-| GatewayProof 启动失败 | enabled、gateway-id、至少 32 字节 secret |
-| GatewayProof 验签失败 | 两端 secret/id、时钟、StripPrefix 后路径和 query |
+| Docker daemon 不可用 | Docker 服务、当前用户 socket 权限 |
+| Compose config 失败 | `.env` 是否存在、必填变量和 Compose v2 版本 |
+| 镜像 pull 失败 | Registry 地址、tag、网络、磁盘和 `docker login` |
+| CPU 架构不匹配 | image platform 与服务器架构；重新指定 `linux/amd64` 或 `linux/arm64` |
 | 端口冲突 | `GATEWAY_HOST_PORT` 是否被占用 |
-| JVM 被杀死 | Docker/主机 OOM 记录，合理设置 `JAVA_TOOL_OPTIONS` |
-| Mac 构建后 Linux 无法运行 | 检查镜像架构，使用 `DOCKER_PLATFORM=linux/amd64` 重建 |
+| Nacos 无法连接 | 地址、namespace/group、认证、网络策略和 DNS |
+| IAM/JWK 不可访问 | issuer/JWK URL、TLS、DNS、防火墙 |
+| JWT 全部 401 | issuer、audience、JWK、Token 时间和必填 claim |
+| GatewayProof 启动失败 | enabled、gateway-id、至少 32 字节 secret |
+| readiness 失败 | 应用日志、端口、配置校验和外部依赖状态 |
+| 容器 OOM Kill | Docker/主机 OOM 记录和 `JAVA_TOOL_OPTIONS` |
+| Docker 磁盘不足 | `docker system df`；由运维按保留策略清理，脚本不会全局 prune |
+| 时间漂移 | 主机 NTP/chrony 状态；GatewayProof 依赖准确时钟 |
+| 回滚版本不存在 | `.release/previous` 与 Registry 中对应 tag |
 
 ## 11. Kubernetes 迁移映射
 
-| 当前 Docker 配置 | 后续 Kubernetes 对应 |
+| Docker Compose | Kubernetes |
 | --- | --- |
-| Docker image/tag | Pod container image |
-| `.env` 普通配置 | ConfigMap |
-| `.env` 敏感配置 | Secret |
-| Compose healthcheck | readinessProbe；liveness 端点映射 livenessProbe |
-| `restart` | Deployment controller |
-| Compose service/network | Service 与集群网络 |
-| 环境变量 | Pod `env` / `envFrom` |
-| `stop_grace_period` | `terminationGracePeriodSeconds` |
-| stdout/stderr | 容器日志采集 |
-| 部署/回滚脚本 | Deployment rollout/rollback |
+| image | Container image |
+| `.env` | ConfigMap / Secret |
+| ports | ContainerPort / Service |
+| healthcheck | readinessProbe / livenessProbe |
+| restart policy | Deployment controller |
+| stop_grace_period | terminationGracePeriodSeconds |
+| Docker network | Kubernetes Service networking |
+| stdout/stderr | Container logging |
+| deploy script | rollout / GitOps |
+| `.release` | Deployment rollout history |
 
-当前仓库没有 Kubernetes YAML、Helm Chart、Ingress 或 Service 清单。
+当前仓库不包含 Kubernetes YAML、Helm Chart、Ingress、Service 或 Argo CD 配置。

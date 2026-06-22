@@ -31,24 +31,34 @@ public class GatewayProofConfiguration {
     }
 
     /**
-     * 创建无状态的 GatewayProof 全局过滤器。
+     * 创建始终启用的外部 GatewayProof Header 清理过滤器。
+     *
+     * @return Header 清理过滤器
+     */
+    @Bean
+    public GatewayProofHeaderSanitizationGlobalFilter gatewayProofHeaderSanitizationGlobalFilter() {
+        return new GatewayProofHeaderSanitizationGlobalFilter();
+    }
+
+    /**
+     * 创建无状态的 GatewayProof 出站签名过滤器。
      *
      * @param properties 出站证明配置
      * @param signer Framework 签名器
      * @param tokenHasher Framework token 指纹工具
      * @param nonceGenerator Framework 安全 nonce 生成器
      * @param gatewayProofClock UTC 时钟
-     * @return GatewayProof 全局过滤器
+     * @return GatewayProof 签名过滤器
      */
     @Bean
-    public GatewayProofGlobalFilter gatewayProofGlobalFilter(
+    public GatewayProofSigningGlobalFilter gatewayProofSigningGlobalFilter(
             GatewayProofProperties properties,
             GatewayProofSigner signer,
             GatewayProofTokenHasher tokenHasher,
             GatewayProofNonceGenerator nonceGenerator,
             Clock gatewayProofClock) {
         validate(properties);
-        return new GatewayProofGlobalFilter(properties, signer, tokenHasher, nonceGenerator, gatewayProofClock);
+        return new GatewayProofSigningGlobalFilter(properties, signer, tokenHasher, nonceGenerator, gatewayProofClock);
     }
 
     private static void validate(GatewayProofProperties properties) {
