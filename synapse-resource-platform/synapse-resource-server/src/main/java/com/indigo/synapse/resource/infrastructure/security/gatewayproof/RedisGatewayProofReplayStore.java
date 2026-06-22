@@ -4,6 +4,7 @@ import com.indigo.synapse.security.autoconfigure.SynapseSecurityProperties;
 import com.indigo.synapse.security.gatewayproof.GatewayProofReplayStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -40,6 +41,7 @@ public final class RedisGatewayProofReplayStore implements GatewayProofReplaySto
      * @param redisTemplate Spring Data Redis 原子命令入口
      * @param securityProperties GatewayProof 有效窗口配置
      */
+    @Autowired
     public RedisGatewayProofReplayStore(
             StringRedisTemplate redisTemplate,
             SynapseSecurityProperties securityProperties) {
