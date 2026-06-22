@@ -104,7 +104,7 @@ class GatewayProofRouteIntegrationTest {
         assertThat(recorded.uri()).isEqualTo("/test?b=2&a=1");
         GatewayProof proof = recorded.proof();
         assertThat(proof.version()).isEqualTo("v1");
-        assertThat(proof.gatewayId()).isEqualTo("synapse-gateway");
+        assertThat(proof.gatewayId()).isEqualTo("synapse-gateway:gateway-proof-test");
         assertThat(proof.timestamp()).isEqualTo(Long.toString(CLOCK.millis()));
         assertThat(proof.nonce()).isEqualTo("AAAAAAAAAAAAAAAAAAAAAA");
         assertThat(proof.signature()).isNotBlank();
@@ -112,7 +112,7 @@ class GatewayProofRouteIntegrationTest {
 
         String tokenHash = new GatewayProofTokenHasher().sha256Hex(TOKEN);
         HmacSha256GatewayProofVerifier verifier = new HmacSha256GatewayProofVerifier(
-                Map.of("synapse-gateway", SECRET), Duration.ofSeconds(60), CLOCK, null, false);
+                Map.of("synapse-gateway:gateway-proof-test", SECRET), Duration.ofSeconds(60), CLOCK, null, false);
         GatewayProofCanonicalRequest downstream = request(proof, "GET", "/test", "b=2&a=1", tokenHash);
 
         assertThat(verifier.verify(proof, downstream).isSuccess()).isTrue();

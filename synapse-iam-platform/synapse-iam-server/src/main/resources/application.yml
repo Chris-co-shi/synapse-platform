@@ -24,7 +24,7 @@ spring:
         file-extension: yml
 
 server:
-  port: ${SERVER_PORT:20001}
+  port: ${SERVER_PORT:8100}
   shutdown: graceful
 
 management:
@@ -43,8 +43,8 @@ synapse:
 
     resource-server:
       enabled: true
-      issuer-uri: http://127.0.0.1:20001
-      jwk-set-uri: http://127.0.0.1:20001/oauth2/jwks
+      issuer-uri: http://127.0.0.1:8100
+      jwk-set-uri: http://127.0.0.1:8100/oauth2/jwks
       audiences:
         - synapse-platform
   time:

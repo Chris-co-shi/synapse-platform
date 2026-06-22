@@ -12,8 +12,9 @@ Gateway 是平台统一外部入口，负责：
 - 清理外部伪造的 `X-Synapse-Gateway-*` Header。
 - 为下游请求签发 GatewayProof。
 - 原样转发客户端 Bearer Token。
+- 对保留的 `/gateway/admin/**` 技术管理命名空间检查 `PERM_gateway:admin`；不执行业务权限判断。
 
-Gateway 不访问数据库，不签发用户 Token，不查询或判断业务权限，不承载 IAM 用户/角色/菜单业务，也不传播可直接信任的身份 Header。接口、资源、组织、租户和数据权限全部由下游服务处理。
+Gateway 不访问数据库，不签发用户 Token，不查询或判断业务资源权限，不承载 IAM 用户/角色/菜单业务，也不传播可直接信任的身份 Header。除保留管理命名空间的技术权限外，接口、资源、组织、租户和数据权限全部由下游服务处理。
 
 ## 2. 请求安全链路
 
@@ -35,15 +36,15 @@ JWT 证明调用主体身份，GatewayProof 证明请求经过可信 Gateway。G
 
 ## 3. JWT 验证
 
-Gateway 复用 Framework `synapse-oauth2-resource-server-webflux`，由其完成 Bearer Token 提取、Reactive decoder、签名/时间/issuer/audience/claim 校验、Authentication 建立和统一 401 响应。Gateway 安全链只采用“公开路径 permitAll，其余路径 authenticated”，不配置业务 authority 或 role 判断。
+Gateway 复用 Framework `synapse-oauth2-resource-server-webflux`，由其完成 Bearer Token 提取、Reactive decoder、签名/时间/issuer/audience/claim 校验、Authentication 建立和统一 401 响应。Gateway 只有一个 `SecurityWebFilterChain`。公开路径 `permitAll`，保留的 `/gateway/admin/**` 要求 `PERM_gateway:admin`，其余路径默认 `authenticated`。该 authority 只保护 Gateway 技术管理命名空间，不表示 Gateway 承担 IAM 或下游业务授权。
 
 关键配置：
 
 ```yaml
 synapse.security.resource-server:
   enabled: true
-  issuer-uri: ${IAM_ISSUER_URI:http://127.0.0.1:20001}
-  jwk-set-uri: ${IAM_JWK_SET_URI:http://127.0.0.1:20001/oauth2/jwks}
+  issuer-uri: ${IAM_ISSUER_URI:http://127.0.0.1:8100}
+  jwk-set-uri: ${IAM_JWK_SET_URI:http://127.0.0.1:8100/oauth2/jwks}
   issuer-validation-enabled: true
   audience-validation-enabled: true
   audiences: [${SYNAPSE_GATEWAY_AUDIENCE:synapse-platform}]
@@ -54,7 +55,7 @@ synapse.security.resource-server:
 
 当前没有真实 `TokenDenylistPort`，因此显式关闭 denylist。当前实现不支持实时撤销已经签发且未过期的 Token，不得将其描述为已具备实时撤销能力。
 
-Token 格式、签名、有效期、`nbf`、issuer、audience、token type 或 required claim 任一不合法时，Gateway 返回 401。合法 Token 即使没有 permissions、roles 或 scope claim，也允许进入转发流程；Gateway 不产生业务权限不足的 403。
+Token 格式、签名、有效期、`nbf`、issuer、audience、token type 或 required claim 任一不合法时，Gateway 返回 401。合法 Token 即使没有 permissions、roles 或 scope claim，也允许进入普通业务路由转发流程。访问保留的 `/gateway/admin/**` 而缺少 `gateway:admin` 权限时返回 403；业务权限不足仍由下游返回 403。
 
 ### 3.1 公开路径
 
@@ -104,6 +105,7 @@ bearer_token_sha256
 - 时间戳是 UTC epoch milliseconds。
 - nonce 由 Framework 密码学安全随机生成器产生。
 - Bearer Token 只以 SHA-256 小写十六进制指纹参与签名；原始 Token 不进入 canonical request。
+- Framework v1 没有独立 audience 行。Platform 使用可信 Route ID 作为 audience，并将签名中的 `gatewayId` 编码为 `<baseGatewayId>:<routeId>`。例如 Resource 路由签发值为 `synapse-gateway:synapse-resource-server`。
 - query 由 Framework 解析、按 name/value 排序并使用 RFC 3986 UTF-8 percent encoding。
 - 不记录 Token、secret、canonical string 或 token 指纹。
 
@@ -135,15 +137,15 @@ StripPrefix 后：GET /test?b=2&a=1
 
 ### 4.3 环境策略
 
-- `dev` 默认关闭证明，可不提供 secret，但仍清理 Header。
-- `beta`、`prd` 默认开启证明。
+- `dev`、`beta`、`prd` 均默认开启证明。
+- 所有环境启用时都必须安全注入 secret；不存在开发环境静默无证明转发。
 - 开启时 gateway-id 不能为空，secret 必须至少 32 UTF-8 字节；否则启动失败。
 - Gateway 是证明签发方，不启用 `synapse.security.gateway-proof.enabled` 入站验证。
 
 | 配置 | 默认值 | 说明 |
 | --- | --- | --- |
-| `synapse.gateway.proof.enabled` | `false` | 是否签发出站 GatewayProof；不影响 Header 清理 |
-| `synapse.gateway.proof.gateway-id` | `synapse-gateway` | 下游信任的 Gateway 稳定标识 |
+| `synapse.gateway.proof.enabled` | `true` | 是否签发出站 GatewayProof；不影响 Header 清理 |
+| `synapse.gateway.proof.gateway-id` | `synapse-gateway` | 基础 Gateway ID；实际签名值追加可信 Route ID audience |
 | `synapse.gateway.proof.secret` | 空 | HMAC secret；启用时必须满足 Framework 至少 32 UTF-8 字节规则 |
 
 secret 只能通过环境变量或 Secret 管理系统注入，不得写入仓库、镜像、日志或异常。初始化、nonce、
@@ -153,7 +155,8 @@ routeId、method 和 path，不记录 Token、token hash、secret、canonical st
 ### 4.4 当前限制
 
 - GatewayProof v1 使用单个共享 HMAC secret，当前没有密钥轮换或多版本签发能力。
-- Gateway 只负责签发，不在本模块实现下游 replay store；下游按 Framework 验证窗口和实际 replay store 负责防重放。
+- 首个 Resource Server 已实现 Redis replay store；其他下游服务仍需各自接入同一验证与共享 Redis 语义。
+- Route ID 是 Platform v1 的 audience 标识，修改 Route ID 会改变下游信任配置，必须作为安全协议变更处理。
 - GatewayProof 不解决服务间任意调用签名，也不替代 mTLS、JWT 或业务授权。
 
 ## 5. 静态路由
@@ -179,7 +182,7 @@ routeId、method 和 path，不记录 Token、token hash、secret、canonical st
 
 Gateway 保留原始 `Authorization: Bearer ...` Header，不写入或信任 `X-User-Id`、`X-Username`、`X-Roles`、`X-Permissions` 等身份权限 Header。
 
-每个下游服务必须：
+首个 `synapse-resource-server` 已完成以下链路；其他下游服务必须按同一规则接入：
 
 1. 独立验证 JWT 签名、时间、issuer、audience 和 claim contract。
 2. 验证 GatewayProof，确认请求经过可信 Gateway 且签名材料未被篡改。
@@ -194,7 +197,7 @@ Gateway 已认证不能成为下游跳过 JWT 验证或业务授权的理由。
 | 变量 | 用途 |
 | --- | --- |
 | `SPRING_PROFILES_ACTIVE` | `dev`、`beta` 或 `prd` |
-| `SERVER_PORT` | Gateway 监听端口，默认 `20000` |
+| `SERVER_PORT` | Gateway 监听端口，默认 `8080` |
 | `NACOS_SERVER_ADDR` | Nacos 地址 |
 | `NACOS_NAMESPACE` / `NACOS_GROUP` | 环境隔离 |
 | `NACOS_USERNAME` / `NACOS_PASSWORD` | Nacos 认证 |
@@ -202,7 +205,7 @@ Gateway 已认证不能成为下游跳过 JWT 验证或业务授权的理由。
 | `IAM_JWK_SET_URI` | IAM JWK Set 地址 |
 | `SYNAPSE_GATEWAY_AUDIENCE` | Gateway 接受的 audience |
 | `GATEWAY_PROOF_ENABLED` | 是否签发出站证明 |
-| `GATEWAY_ID` | Gateway 标识 |
+| `GATEWAY_ID` | 基础 Gateway 标识；不得包含 `:` |
 | `GATEWAY_PROOF_SECRET` | HMAC secret，开启证明时必填 |
 
 ## 8. 本地构建与验证
@@ -214,29 +217,35 @@ mvn validate
 mvn clean test
 ```
 
-Gateway 定向验证使用子 POM：
+Gateway 与首个 Resource 验证：
 
 ```bash
-mvn -f synapse-gateway-platform/pom.xml clean test
-mvn -f synapse-gateway-platform/pom.xml dependency:tree
+mvn -pl synapse-gateway-platform -am clean verify
+mvn -pl synapse-resource-platform/synapse-resource-server -am clean verify
+mvn clean verify
+mvn -pl synapse-gateway-platform dependency:tree
+git diff --check
 ```
+
+CI 的 Resource Job 设置 `-Dsynapse.test.redis.required=true`，Docker 不可用时测试失败而不是跳过；本地无 Docker 时真实 Redis Testcontainers 测试会明确跳过。
 
 开发启动需要可访问 IAM JWK；如果只运行自动化测试，不访问真实 IAM/Nacos。
 
 ```bash
 SPRING_PROFILES_ACTIVE=dev \
-IAM_ISSUER_URI=http://127.0.0.1:20001 \
-IAM_JWK_SET_URI=http://127.0.0.1:20001/oauth2/jwks \
+IAM_ISSUER_URI=http://127.0.0.1:8100 \
+IAM_JWK_SET_URI=http://127.0.0.1:8100/oauth2/jwks \
+GATEWAY_PROOF_SECRET='<at-least-32-byte-secret>' \
 mvn -f synapse-gateway-platform/pom.xml spring-boot:run
 ```
 
 ## 9. curl 示例
 
 ```bash
-curl -i http://127.0.0.1:20000/actuator/health/readiness
-curl -i http://127.0.0.1:20000/resource/example
+curl -i http://127.0.0.1:8080/actuator/health/readiness
+curl -i http://127.0.0.1:8080/resource/example
 curl -i -H 'Authorization: Bearer <access-token>' \
-  http://127.0.0.1:20000/resource/example
+  http://127.0.0.1:8080/resource/example
 ```
 
 第二个请求应返回 401。第三个请求只有在 Token、IAM JWK、Nacos 和下游服务均有效时才能成功转发。不要把真实 Token 写入脚本或提交到仓库。
@@ -245,8 +254,8 @@ curl -i -H 'Authorization: Bearer <access-token>' \
 
 - 启动提示 issuer/audience 配置非法：检查 `IAM_ISSUER_URI` 和 `SYNAPSE_GATEWAY_AUDIENCE`。
 - JWT 始终返回 401：检查 JWK 可达性、Token 签名、issuer、audience、有效期和必填 claim。
-- beta/prd 启动失败且提示 GatewayProof 配置非法：提供至少 32 字节 secret，确认 `GATEWAY_ID` 非空。
-- 下游 GatewayProof 验签失败：确认两端 secret/gateway-id 一致、服务器时间同步，并确认下游使用 StripPrefix 后路径。
+- 任一环境启动失败且提示 GatewayProof 配置非法：提供至少 32 字节 secret，确认 `GATEWAY_ID` 非空且不包含 `:`。
+- 下游 GatewayProof 验签失败：确认两端 secret 和 audience-scoped gateway-id 一致、服务器时间同步，并确认下游使用 StripPrefix 后路径。
 - 路由返回 503：检查 Nacos 注册、namespace/group 和目标服务名。
 - macOS 出现 Netty DNS native 警告：公共依赖已移除 Mac 专用 native artifact；警告不应通过污染 Linux 镜像解决。
 

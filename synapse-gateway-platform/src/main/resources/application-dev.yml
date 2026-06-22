@@ -15,4 +15,4 @@ logging:
 synapse:
   gateway:
     proof:
-      enabled: ${GATEWAY_PROOF_ENABLED:false}
+      enabled: ${GATEWAY_PROOF_ENABLED:true}

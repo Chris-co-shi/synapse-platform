@@ -117,9 +117,9 @@ docker compose \
 手工检查：
 
 ```bash
-curl -fsS http://127.0.0.1:20000/actuator/health
-curl -fsS http://127.0.0.1:20000/actuator/health/liveness
-curl -fsS http://127.0.0.1:20000/actuator/health/readiness
+curl -fsS http://127.0.0.1:8080/actuator/health
+curl -fsS http://127.0.0.1:8080/actuator/health/liveness
+curl -fsS http://127.0.0.1:8080/actuator/health/readiness
 docker compose --env-file deploy/docker/gateway/.env \
   -f deploy/docker/gateway/docker-compose.yml ps
 docker compose --env-file deploy/docker/gateway/.env \

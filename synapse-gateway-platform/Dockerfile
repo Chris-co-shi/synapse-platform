@@ -24,7 +24,7 @@ RUN groupadd --gid 10001 synapse \
 COPY --chown=10001:10001 ${JAR_FILE} /opt/synapse/application.jar
 
 USER 10001:10001
-EXPOSE 20000
+EXPOSE 8080
 
 # JAVA_TOOL_OPTIONS 由 JVM 原生解析；exec form 确保 SIGTERM 直接到达 Java 进程。
 ENTRYPOINT ["java", "-jar", "/opt/synapse/application.jar"]

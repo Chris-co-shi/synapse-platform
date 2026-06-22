@@ -6,10 +6,10 @@ services:
     pull_policy: "${GATEWAY_PULL_POLICY:-always}"
     restart: unless-stopped
     ports:
-      - "${GATEWAY_HOST_PORT:-20000}:${SERVER_PORT:-20000}"
+      - "${GATEWAY_HOST_PORT:-8080}:${SERVER_PORT:-8080}"
     environment:
       SPRING_PROFILES_ACTIVE: "${SPRING_PROFILES_ACTIVE:-prd}"
-      SERVER_PORT: "${SERVER_PORT:-20000}"
+      SERVER_PORT: "${SERVER_PORT:-8080}"
       NACOS_SERVER_ADDR: "${NACOS_SERVER_ADDR:?NACOS_SERVER_ADDR is required}"
       NACOS_NAMESPACE: "${NACOS_NAMESPACE:-prd}"
       NACOS_GROUP: "${NACOS_GROUP:-SYNAPSE_PLATFORM_PRD}"

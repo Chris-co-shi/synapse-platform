@@ -65,8 +65,10 @@ public class GatewayProofConfiguration {
         if (!properties.isEnabled()) {
             return;
         }
-        if (properties.getGatewayId() == null || properties.getGatewayId().isBlank()) {
-            throw new IllegalStateException("GatewayProof gateway-id must not be blank when proof is enabled");
+        try {
+            GatewayProofAudienceScope.validateBaseGatewayId(properties.getGatewayId());
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalStateException("GatewayProof gateway-id is invalid when proof is enabled", ex);
         }
         try {
             GatewayProofSecretValidator.requireValid(properties.getSecret());

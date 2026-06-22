@@ -32,6 +32,9 @@ import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.G
  * 和 query；随后在 Netty 网络转发之前写入证明 Header。GatewayProof 只证明请求经过可信 Gateway
  * 且签名内容未被篡改，不能替代 Gateway 或下游的 JWT 验证，也不能替代下游业务权限授权。</p>
  *
+ * <p>Framework v1 没有独立 audience 字段，因此本过滤器将服务端 Route ID 作为 audience，并编码进
+ * 受签名的 Gateway ID：{@code <gatewayId>:<routeId>}。下游必须只信任自身对应的完整 ID。</p>
+ *
  * <p>原始 Bearer Token 必须继续通过 Authorization Header 转发，供下游独立验证 JWT；签名只绑定其
  * Framework SHA-256 指纹。任何失败均 fail closed，日志只记录 routeId、method、path 和异常类型，
  * 不记录 Token、secret、canonical string、signature、token hash 或完整 nonce。</p>
@@ -114,12 +117,15 @@ public final class GatewayProofSigningGlobalFilter implements GlobalFilter, Orde
         HttpMethod method = Objects.requireNonNull(request.getMethod(), "HTTP method is required");
         URI uri = Objects.requireNonNull(request.getURI(), "request URI is required");
         String path = Objects.requireNonNull(uri.getRawPath(), "request path is required");
+        Route route = Objects.requireNonNull(exchange.getAttribute(GATEWAY_ROUTE_ATTR),
+                "Gateway route is required for GatewayProof audience");
+        String scopedGatewayId = GatewayProofAudienceScope.scopedGatewayId(properties.getGatewayId(), route.getId());
         String timestamp = Long.toString(clock.millis());
         String nonce = nonceGenerator.generate();
         String bearerToken = extractBearerToken(request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION));
         GatewayProofCanonicalRequest canonicalRequest = new GatewayProofCanonicalRequest(
                 GatewayProofVersion.V1,
-                properties.getGatewayId(),
+                scopedGatewayId,
                 timestamp,
                 nonce,
                 method.name(),
@@ -130,7 +136,7 @@ public final class GatewayProofSigningGlobalFilter implements GlobalFilter, Orde
         String signature = signer.sign(canonicalRequest, properties.getSecret());
         return request.mutate().headers(headers -> {
             headers.set(GatewayProofHeaders.VERSION, GatewayProofVersion.V1);
-            headers.set(GatewayProofHeaders.GATEWAY_ID, properties.getGatewayId());
+            headers.set(GatewayProofHeaders.GATEWAY_ID, scopedGatewayId);
             headers.set(GatewayProofHeaders.TIMESTAMP, timestamp);
             headers.set(GatewayProofHeaders.NONCE, nonce);
             headers.set(GatewayProofHeaders.SIGNATURE, signature);

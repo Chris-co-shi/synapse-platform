@@ -39,6 +39,16 @@ class GatewayProofPropertiesTest {
         ).run(context -> assertThat(context).hasFailed());
     }
 
+
+    @Test
+    void shouldRejectAmbiguousGatewayIdSeparatorWhenEnabled() {
+        contextRunner.withPropertyValues(
+                "synapse.gateway.proof.enabled=true",
+                "synapse.gateway.proof.gateway-id=synapse:gateway",
+                "synapse.gateway.proof.secret=" + VALID_SECRET
+        ).run(context -> assertThat(context).hasFailed());
+    }
+
     @Test
     void shouldRejectBlankSecretWhenEnabled() {
         contextRunner.withPropertyValues("synapse.gateway.proof.enabled=true")

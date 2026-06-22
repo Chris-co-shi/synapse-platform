@@ -100,7 +100,7 @@ spring:
                 - StripPrefix=1
 
 server:
-  port: ${SERVER_PORT:20000}
+  port: ${SERVER_PORT:8080}
   shutdown: graceful
 
 management:
@@ -120,8 +120,8 @@ synapse:
   security:
     resource-server:
       enabled: true
-      issuer-uri: ${IAM_ISSUER_URI:http://127.0.0.1:20001}
-      jwk-set-uri: ${IAM_JWK_SET_URI:http://127.0.0.1:20001/oauth2/jwks}
+      issuer-uri: ${IAM_ISSUER_URI:http://127.0.0.1:8100}
+      jwk-set-uri: ${IAM_JWK_SET_URI:http://127.0.0.1:8100/oauth2/jwks}
       issuer-validation-enabled: true
       audience-validation-enabled: true
       audiences:
@@ -138,6 +138,6 @@ synapse:
         - /iam/oauth2/jwks
   gateway:
     proof:
-      enabled: ${GATEWAY_PROOF_ENABLED:false}
+      enabled: ${GATEWAY_PROOF_ENABLED:true}
       gateway-id: ${GATEWAY_ID:synapse-gateway}
       secret: ${GATEWAY_PROOF_SECRET:}

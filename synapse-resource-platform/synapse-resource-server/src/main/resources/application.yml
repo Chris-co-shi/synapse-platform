@@ -22,6 +22,14 @@ spring:
         username: ${NACOS_USERNAME:}
         password: ${NACOS_PASSWORD:}
         file-extension: yml
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
+      timeout: ${REDIS_COMMAND_TIMEOUT:2s}
 
 server:
   port: ${SERVER_PORT:0}
@@ -43,3 +51,33 @@ synapse:
     default-zone: UTC
   cloud:
     enabled: true
+  security:
+    resource-server:
+      enabled: true
+      issuer-uri: ${IAM_ISSUER_URI:http://127.0.0.1:8100}
+      jwk-set-uri: ${IAM_JWK_SET_URI:http://127.0.0.1:8100/oauth2/jwks}
+      issuer-validation-enabled: true
+      audience-validation-enabled: true
+      audiences:
+        - ${RESOURCE_SERVER_AUDIENCE:synapse-resource-server}
+      denylist-enabled: false
+      csrf-enabled: false
+      fail-fast: true
+      permit-paths:
+        - /actuator/health
+        - /actuator/health/**
+        - /actuator/info
+        - /error
+    gateway-proof:
+      enabled: ${GATEWAY_PROOF_ENABLED:true}
+      required: true
+      gateway-id: ${TRUSTED_GATEWAY_ID:synapse-gateway:synapse-resource-server}
+      secret: ${GATEWAY_PROOF_SECRET:}
+      timestamp-skew: ${GATEWAY_PROOF_TIMESTAMP_SKEW:60s}
+      replay-protection-enabled: true
+      fail-fast: true
+      permit-paths:
+        - /actuator/health
+        - /actuator/health/**
+        - /actuator/info
+        - /error

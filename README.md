@@ -5,10 +5,10 @@ Synapse Platform 是基于 Java 21、Spring Boot、Spring Cloud 和 Spring Cloud
 ## 当前状态
 
 - 已建立 13 个一级平台模块。
-- Gateway 已实现 Reactive JWT 入口认证、明确白名单和默认保护策略。
-- Gateway 会始终清理外部 `X-Synapse-Gateway-*` Header，并按 Framework 协议为最终下游请求签发 GatewayProof。
+- Gateway 已实现单一 Reactive SecurityWebFilterChain、明确白名单、默认认证和保留管理命名空间 403 策略。
+- Gateway 会始终清理外部 `X-Synapse-Gateway-*` Header，并按 Framework 协议为最终下游请求签发绑定 Route audience 的 GatewayProof。
 - Gateway 提供 Java 21 非 root 镜像、Docker Compose 部署、健康检查和失败回滚。
-- 其他平台模块仍处于不同建设阶段；全仓 POM 已移除当前 Framework 不再提供的 artifact，并按现有代码需要直接声明 Spring Cloud Alibaba 组件。
+- `synapse-resource-server` 已作为首个下游完成独立 JWT、GatewayProof、Redis nonce replay store、CurrentPrincipalContext 和 OperationContext 验证闭环；其余模块仍处于不同建设阶段。
 
 ## 模块概览
 
@@ -43,6 +43,18 @@ Synapse Platform 是基于 Java 21、Spring Boot、Spring Cloud 和 Spring Cloud
 
 构建前应确保当前 Framework 构件可由本地 Maven 仓库或已配置的远程仓库解析。若使用 GitHub Packages，请在 Maven `settings.xml` 中配置访问凭据；凭据不得提交到本仓库。
 
+## 正式端口基线
+
+| 服务 | 端口 |
+| --- | --- |
+| Gateway | 8080 |
+| IAM | 8100 |
+| Message | 8200 |
+| File | 8300 |
+| Task | 8400 |
+
+仓库内正式 `application.yml`、Gateway Docker/Compose 和文档统一使用上述口径。自动化测试可以使用随机端口 `0`。外部 Nacos Data ID 若覆盖 `server.port` 或 IAM 地址，必须同步为同一口径；仓库不保存远端 Nacos 实例数据。
+
 ## Gateway 快速验证
 
 全仓构建基线：
@@ -64,12 +76,13 @@ mvn -f synapse-gateway-platform/pom.xml dependency:tree
 ```bash
 SPRING_PROFILES_ACTIVE=dev \
 NACOS_SERVER_ADDR=127.0.0.1:8848 \
-IAM_ISSUER_URI=http://127.0.0.1:20001 \
-IAM_JWK_SET_URI=http://127.0.0.1:20001/oauth2/jwks \
+IAM_ISSUER_URI=http://127.0.0.1:8100 \
+IAM_JWK_SET_URI=http://127.0.0.1:8100/oauth2/jwks \
+GATEWAY_PROOF_SECRET='<at-least-32-byte-secret>' \
 mvn -f synapse-gateway-platform/pom.xml spring-boot:run
 ```
 
-开发环境默认关闭 GatewayProof 签发，但仍清理所有外部 Gateway Header。beta/prd 默认开启，必须安全注入至少 32 字节 secret。
+dev、beta、prd 均默认开启 GatewayProof 签发，并始终清理所有外部 Gateway Header。启动时必须安全注入至少 32 字节 secret。
 
 Gateway Docker 镜像使用 Java 21 JRE、非 root 用户和最小运行 context。构建及 Compose 部署入口：
 
@@ -110,6 +123,7 @@ Gateway Docker 镜像使用 Java 21 JRE、非 root 用户和最小运行 context
 - [模块边界与服务设计](docs/02-模块边界与服务设计.md)
 - [IAM 架构与阶段规划](docs/iam.md)
 - [Gateway 设计与安全模型](docs/gateway.md)
+- [Resource P0 安全验证](docs/resource-security.md)
 - [Gateway Docker 部署](deploy/docker/gateway/README.md)
 
 ## 安全说明

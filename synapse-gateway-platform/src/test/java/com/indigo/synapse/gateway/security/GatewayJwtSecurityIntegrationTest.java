@@ -1,6 +1,8 @@
 package com.indigo.synapse.gateway.security;
 
 import com.indigo.synapse.gateway.SynapseGatewayApplication;
+import org.springframework.context.ApplicationContext;
+import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -53,6 +55,9 @@ class GatewayJwtSecurityIntegrationTest {
     @org.springframework.beans.factory.annotation.Autowired
     private WebTestClient webTestClient;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private ApplicationContext applicationContext;
+
     @Test
     void shouldAllowHealthAndExplicitIamPublicPathsWithoutUserToken() {
         client().get().uri("/actuator/health").exchange().expectStatus().isOk();
@@ -60,6 +65,13 @@ class GatewayJwtSecurityIntegrationTest {
         assertThat(statusOf("/iam/oauth2/token")).isNotEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(statusOf("/iam/oauth2/jwks")).isNotEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(statusOf("/iam/.well-known/openid-configuration")).isNotEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void shouldUseExactlyOneSecurityChainAndProtectBusinessRouteNamespaces() {
+        assertThat(applicationContext.getBeansOfType(SecurityWebFilterChain.class)).hasSize(1);
+        client().get().uri("/iam/test").exchange().expectStatus().isUnauthorized();
+        client().get().uri("/resource/test").exchange().expectStatus().isUnauthorized();
     }
 
     @Test
@@ -87,6 +99,12 @@ class GatewayJwtSecurityIntegrationTest {
     void shouldForwardValidTokenWithoutBusinessPermissionClaims() {
         client().get().uri("/test/protected").headers(headers -> headers.setBearerAuth("valid"))
                 .exchange().expectStatus().isOk().expectBody(String.class).isEqualTo("ok");
+    }
+
+    @Test
+    void shouldReturn403ForAuthenticatedTokenWithoutGatewayAdminAuthority() {
+        client().get().uri("/gateway/admin/status").headers(headers -> headers.setBearerAuth("valid"))
+                .exchange().expectStatus().isForbidden();
     }
 
     private HttpStatusCode statusOf(String path) {

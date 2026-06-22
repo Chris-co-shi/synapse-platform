@@ -7,6 +7,7 @@ import com.indigo.synapse.security.gatewayproof.GatewayProofSigner;
 import com.indigo.synapse.security.gatewayproof.GatewayProofTokenHasher;
 import com.indigo.synapse.security.gatewayproof.HmacSha256GatewayProofSigner;
 import org.junit.jupiter.api.Test;
+import org.springframework.cloud.gateway.route.Route;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
@@ -22,6 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR;
 
 /**
  * {@link GatewayProofSigningGlobalFilter} 签名材料、Bearer 提取和失败关闭测试。
@@ -40,7 +42,7 @@ class GatewayProofSigningGlobalFilterTest {
             return delegate.sign(request, secret);
         });
         String authorization = "  bEaReR\t  access-token  ";
-        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest
+        MockServerWebExchange exchange = routedExchange(MockServerHttpRequest
                 .method(org.springframework.http.HttpMethod.POST, "/downstream?b=2&a=1")
                 .header(HttpHeaders.AUTHORIZATION, authorization)
                 .build());
@@ -54,11 +56,12 @@ class GatewayProofSigningGlobalFilterTest {
         HttpHeaders headers = forwarded.get().getRequest().getHeaders();
         assertThat(headers.getFirst(HttpHeaders.AUTHORIZATION)).isEqualTo(authorization);
         assertThat(headers.getFirst(GatewayProofHeaders.VERSION)).isEqualTo("v1");
-        assertThat(headers.getFirst(GatewayProofHeaders.GATEWAY_ID)).isEqualTo("synapse-gateway");
+        assertThat(headers.getFirst(GatewayProofHeaders.GATEWAY_ID)).isEqualTo("synapse-gateway:test-route");
         assertThat(headers.getFirst(GatewayProofHeaders.TIMESTAMP)).isEqualTo(Long.toString(CLOCK.millis()));
         assertThat(headers.getFirst(GatewayProofHeaders.NONCE)).isEqualTo("AAAAAAAAAAAAAAAAAAAAAA");
         assertThat(headers.getFirst(GatewayProofHeaders.SIGNATURE)).isNotBlank();
         assertThat(signedRequest.get()).satisfies(request -> {
+            assertThat(request.gatewayId()).isEqualTo("synapse-gateway:test-route");
             assertThat(request.method()).isEqualTo("POST");
             assertThat(request.path()).isEqualTo("/downstream");
             assertThat(request.query()).isEqualTo("b=2&a=1");
@@ -81,7 +84,7 @@ class GatewayProofSigningGlobalFilterTest {
                 request.header(HttpHeaders.AUTHORIZATION, authorization);
             }
 
-            filter.filter(MockServerWebExchange.from(request.build()), current -> Mono.empty()).block();
+            filter.filter(routedExchange(request.build()), current -> Mono.empty()).block();
 
             assertThat(signedRequest.get().bearerTokenHash()).isEmpty();
         }
@@ -111,6 +114,23 @@ class GatewayProofSigningGlobalFilterTest {
                 .noneMatch(GatewayProofHeaders::isGatewayProofHeader);
     }
 
+
+    @Test
+    void shouldFailClosedWhenRouteAudienceIsUnavailable() {
+        GatewayProofSigningGlobalFilter filter = newFilter((request, secret) -> "signature");
+        AtomicBoolean forwarded = new AtomicBoolean();
+
+        Throwable failure = catchThrowable(() -> filter.filter(
+                MockServerWebExchange.from(MockServerHttpRequest.get("/test").build()),
+                current -> {
+                    forwarded.set(true);
+                    return Mono.empty();
+                }).block());
+
+        assertThat(failure).isInstanceOf(GatewayProofSigningException.class);
+        assertThat(forwarded).isFalse();
+    }
+
     @Test
     void shouldFailClosedWhenSigningFails() {
         for (GatewayProofSigner signer : new GatewayProofSigner[]{
@@ -122,7 +142,7 @@ class GatewayProofSigningGlobalFilterTest {
             GatewayProofSigningGlobalFilter filter = newFilter(signer);
 
             Throwable failure = catchThrowable(() -> filter.filter(
-                    MockServerWebExchange.from(MockServerHttpRequest.get("/test").build()),
+                    routedExchange(MockServerHttpRequest.get("/test").build()),
                     current -> {
                         forwarded.set(true);
                         return Mono.empty();
@@ -132,6 +152,17 @@ class GatewayProofSigningGlobalFilterTest {
                     .hasMessage("GatewayProof signing failed");
             assertThat(forwarded).isFalse();
         }
+    }
+
+    private static MockServerWebExchange routedExchange(org.springframework.http.server.reactive.ServerHttpRequest request) {
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+        Route route = Route.async()
+                .id("test-route")
+                .uri("http://127.0.0.1")
+                .predicate(ignored -> true)
+                .build();
+        exchange.getAttributes().put(GATEWAY_ROUTE_ATTR, route);
+        return exchange;
     }
 
     private static GatewayProofSigningGlobalFilter newFilter(GatewayProofSigner signer) {

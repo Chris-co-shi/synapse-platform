@@ -15,7 +15,9 @@ public class GatewayProofProperties {
     /** 是否为转发请求签发 GatewayProof；关闭时仍会清理外部伪造 Header。 */
     private boolean enabled;
 
-    /** Gateway 的稳定标识，下游服务按此标识选择可信密钥。 */
+    /**
+     * Gateway 的稳定基础标识。实际签名值为 {@code gatewayId:routeId}，其中 routeId 是下游 audience。
+     */
     private String gatewayId = "synapse-gateway";
 
     /** HMAC secret，只能通过环境变量或 Secret 管理系统注入，禁止记录到日志。 */

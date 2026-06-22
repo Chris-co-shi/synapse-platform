@@ -82,6 +82,39 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-gateway-reactive-boundary</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <searchTransitive>true</searchTransitive>
+                                    <message>Gateway must remain a pure WebFlux edge service without MVC, database, MyBatis, Druid, data or Platform server dependencies.</message>
+                                    <excludes>
+                                        <exclude>org.springframework.boot:spring-boot-starter-web</exclude>
+                                        <exclude>org.springframework.boot:spring-boot-starter-jdbc</exclude>
+                                        <exclude>org.springframework:spring-webmvc</exclude>
+                                        <exclude>org.springframework:spring-jdbc</exclude>
+                                        <exclude>com.baomidou:*</exclude>
+                                        <exclude>com.alibaba:druid*</exclude>
+                                        <exclude>com.indigo.synapse:synapse-data</exclude>
+                                        <exclude>com.indigo.synapse:synapse-mybatis-plus</exclude>
+                                        <exclude>com.indigo.synapse:synapse-datasource</exclude>
+                                        <exclude>com.indigo.synapse.platform:*server</exclude>
+                                    </excludes>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <executions>
