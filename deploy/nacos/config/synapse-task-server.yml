@@ -1,0 +1,3 @@
+# Synapse Task Server Nacos baseline
+server:
+  port: ${SERVER_PORT:8400}
