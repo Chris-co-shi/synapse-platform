@@ -1,9 +1,9 @@
 name: Apply Gateway P0 Patch
 
 on:
-  push:
+  pull_request:
     branches:
-      - codex/gateway-p0-bootstrap-work
+      - codex/gateway-p0-bootstrap
   workflow_dispatch:
 
 permissions:
@@ -14,9 +14,10 @@ jobs:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout head branch
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
 
       - name: Reconstruct and apply patch
@@ -38,4 +39,4 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "feat: close Gateway P0 security chain"
-          git push
+          git push origin HEAD:${{ github.head_ref }}
