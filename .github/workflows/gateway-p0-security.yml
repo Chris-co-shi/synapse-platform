@@ -40,29 +40,54 @@ jobs:
         run: |
           java -version
           mvn -version
+          mkdir -p target/ci-logs
 
       - name: Verify Gateway reactor slice
-        run: mvn -B -ntp -pl synapse-gateway-platform -am clean verify
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B -ntp -pl synapse-gateway-platform -am clean verify 2>&1 \
+            | tee target/ci-logs/gateway-verify.log
 
       - name: Verify Resource security slice with mandatory Redis container
-        run: >-
-          mvn -B -ntp -Dsynapse.test.redis.required=true
-          -pl synapse-resource-platform/synapse-resource-server -am clean verify
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B -ntp -Dsynapse.test.redis.required=true \
+            -pl synapse-resource-platform/synapse-resource-server -am clean verify 2>&1 \
+            | tee target/ci-logs/resource-verify.log
 
       - name: Inspect Gateway dependency tree
+        shell: bash
         run: |
+          set -o pipefail
           mvn -B -ntp -pl synapse-gateway-platform dependency:tree \
-            -DoutputFile=target/gateway-dependency-tree.txt
-          cat synapse-gateway-platform/target/gateway-dependency-tree.txt
+            -DoutputFile=target/gateway-dependency-tree.txt 2>&1 \
+            | tee target/ci-logs/dependency-tree-command.log
+          cp synapse-gateway-platform/target/gateway-dependency-tree.txt \
+            target/ci-logs/gateway-dependency-tree.txt
+          cat target/ci-logs/gateway-dependency-tree.txt
           if grep -E \
             'spring-boot-starter-web:|spring-boot-starter-jdbc:|spring-webmvc:|spring-jdbc:|mybatis|druid|com.indigo.synapse:synapse-data:|com.indigo.synapse:synapse-mybatis-plus:|com.indigo.synapse:synapse-datasource:|com.indigo.synapse.platform:.*-server:' \
-            synapse-gateway-platform/target/gateway-dependency-tree.txt; then
+            target/ci-logs/gateway-dependency-tree.txt; then
             echo 'Forbidden Gateway dependency detected.' >&2
             exit 1
           fi
 
       - name: Verify full reactor
-        run: mvn -B -ntp -Dsynapse.test.redis.required=true clean verify
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B -ntp -Dsynapse.test.redis.required=true clean verify 2>&1 \
+            | tee target/ci-logs/full-reactor-verify.log
 
       - name: Check patch whitespace
         run: git diff --check origin/main...HEAD
+
+      - name: Upload verification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gateway-p0-verification-logs
+          path: target/ci-logs
+          if-no-files-found: warn
