@@ -19,6 +19,9 @@ jobs:
     timeout-minutes: 45
     outputs:
       gateway-failure-summary: ${{ steps.gateway-verify.outputs.failure-summary }}
+      resource-failure-summary: ${{ steps.resource-verify.outputs.failure-summary }}
+      dependency-failure-summary: ${{ steps.dependency-tree.outputs.failure-summary }}
+      reactor-failure-summary: ${{ steps.full-reactor.outputs.failure-summary }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -54,45 +57,77 @@ jobs:
           status=$?
           if [ "$status" -ne 0 ]; then
             grep -E '^\[ERROR\]|Rule [0-9]+:|Failed to execute goal' \
-              .ci-logs/gateway-verify.log | tail -n 30 \
+              .ci-logs/gateway-verify.log | tail -n 40 \
               | base64 --wrap=0 > .ci-logs/gateway-failure-summary.b64 || true
             echo "failure-summary=$(cat .ci-logs/gateway-failure-summary.b64)" >> "$GITHUB_OUTPUT"
-            tail -n 80 .ci-logs/gateway-verify.log
+            tail -n 100 .ci-logs/gateway-verify.log
             exit "$status"
           fi
           tail -n 20 .ci-logs/gateway-verify.log
 
       - name: Verify Resource security slice with mandatory Redis container
+        id: resource-verify
         shell: bash
         run: |
-          set -o pipefail
+          set +e
           mvn -B -ntp -Dsynapse.test.redis.required=true \
-            -pl synapse-resource-platform/synapse-resource-server -am clean verify 2>&1 \
-            | tee .ci-logs/resource-verify.log
+            -pl synapse-resource-platform/synapse-resource-server -am clean verify \
+            > .ci-logs/resource-verify.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            grep -E '^\[ERROR\]|Rule [0-9]+:|Failed to execute goal|Tests run:|Caused by:' \
+              .ci-logs/resource-verify.log | tail -n 60 \
+              | base64 --wrap=0 > .ci-logs/resource-failure-summary.b64 || true
+            echo "failure-summary=$(cat .ci-logs/resource-failure-summary.b64)" >> "$GITHUB_OUTPUT"
+            tail -n 120 .ci-logs/resource-verify.log
+            exit "$status"
+          fi
+          tail -n 20 .ci-logs/resource-verify.log
 
       - name: Inspect Gateway dependency tree
+        id: dependency-tree
         shell: bash
         run: |
-          set -o pipefail
+          set +e
           mvn -B -ntp -pl synapse-gateway-platform dependency:tree \
-            -DoutputFile=target/gateway-dependency-tree.txt 2>&1 \
-            | tee .ci-logs/dependency-tree-command.log
-          cp synapse-gateway-platform/target/gateway-dependency-tree.txt \
-            .ci-logs/gateway-dependency-tree.txt
-          cat .ci-logs/gateway-dependency-tree.txt
-          if grep -E \
-            'spring-boot-starter-web:|spring-boot-starter-jdbc:|spring-webmvc:|spring-jdbc:|mybatis|druid|com.indigo.synapse:synapse-data:|com.indigo.synapse:synapse-mybatis-plus:|com.indigo.synapse:synapse-datasource:|com.indigo.synapse.platform:.*-server:' \
-            .ci-logs/gateway-dependency-tree.txt; then
-            echo 'Forbidden Gateway dependency detected.' >&2
-            exit 1
+            -DoutputFile=target/gateway-dependency-tree.txt \
+            > .ci-logs/dependency-tree-command.log 2>&1
+          status=$?
+          if [ "$status" -eq 0 ]; then
+            cp synapse-gateway-platform/target/gateway-dependency-tree.txt \
+              .ci-logs/gateway-dependency-tree.txt
+            cat .ci-logs/gateway-dependency-tree.txt
+            if grep -E \
+              'spring-boot-starter-web:|spring-boot-starter-jdbc:|spring-webmvc:|spring-jdbc:|mybatis|druid|com.indigo.synapse:synapse-data:|com.indigo.synapse:synapse-mybatis-plus:|com.indigo.synapse:synapse-datasource:|com.indigo.synapse.platform:.*-server:' \
+              .ci-logs/gateway-dependency-tree.txt; then
+              echo 'Forbidden Gateway dependency detected.' | tee -a .ci-logs/dependency-tree-command.log
+              status=1
+            fi
+          fi
+          if [ "$status" -ne 0 ]; then
+            tail -n 80 .ci-logs/dependency-tree-command.log \
+              | base64 --wrap=0 > .ci-logs/dependency-failure-summary.b64 || true
+            echo "failure-summary=$(cat .ci-logs/dependency-failure-summary.b64)" >> "$GITHUB_OUTPUT"
+            exit "$status"
           fi
 
       - name: Verify full reactor
+        id: full-reactor
         shell: bash
         run: |
-          set -o pipefail
-          mvn -B -ntp -Dsynapse.test.redis.required=true clean verify 2>&1 \
-            | tee .ci-logs/full-reactor-verify.log
+          set +e
+          mvn -B -ntp -Dsynapse.test.redis.required=true clean verify \
+            > .ci-logs/full-reactor-verify.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            grep -E '^\[ERROR\]|Rule [0-9]+:|Failed to execute goal|Tests run:|Caused by:' \
+              .ci-logs/full-reactor-verify.log | tail -n 60 \
+              | base64 --wrap=0 > .ci-logs/reactor-failure-summary.b64 || true
+            echo "failure-summary=$(cat .ci-logs/reactor-failure-summary.b64)" >> "$GITHUB_OUTPUT"
+            tail -n 120 .ci-logs/full-reactor-verify.log
+            exit "$status"
+          fi
+          tail -n 30 .ci-logs/full-reactor-verify.log
 
       - name: Check patch whitespace
         run: git diff --check origin/main...HEAD
@@ -103,19 +138,35 @@ jobs:
         with:
           name: gateway-p0-verification-logs
           path: .ci-logs
+          include-hidden-files: true
           if-no-files-found: error
 
-  gateway-failure-diagnostic:
+  failure-diagnostic:
     needs: gateway-p0-security
     if: always() && needs.gateway-p0-security.result == 'failure'
     runs-on: ubuntu-latest
     steps:
-      - name: Print concise Gateway failure
+      - name: Print concise failure
         env:
-          FAILURE_SUMMARY: ${{ needs.gateway-p0-security.outputs.gateway-failure-summary }}
+          GATEWAY_FAILURE: ${{ needs.gateway-p0-security.outputs.gateway-failure-summary }}
+          RESOURCE_FAILURE: ${{ needs.gateway-p0-security.outputs.resource-failure-summary }}
+          DEPENDENCY_FAILURE: ${{ needs.gateway-p0-security.outputs.dependency-failure-summary }}
+          REACTOR_FAILURE: ${{ needs.gateway-p0-security.outputs.reactor-failure-summary }}
         run: |
-          if [ -n "$FAILURE_SUMMARY" ]; then
-            echo "$FAILURE_SUMMARY" | base64 --decode
-          else
-            echo 'Gateway failure summary was not produced.'
+          printed=false
+          for entry in \
+            "Gateway|$GATEWAY_FAILURE" \
+            "Resource|$RESOURCE_FAILURE" \
+            "Dependency tree|$DEPENDENCY_FAILURE" \
+            "Full reactor|$REACTOR_FAILURE"; do
+            label="${entry%%|*}"
+            payload="${entry#*|}"
+            if [ -n "$payload" ]; then
+              echo "===== $label failure ====="
+              echo "$payload" | base64 --decode
+              printed=true
+            fi
+          done
+          if [ "$printed" = false ]; then
+            echo 'A failure occurred without a generated Maven summary.'
           fi
