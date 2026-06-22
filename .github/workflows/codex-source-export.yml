@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - codex/gateway-p0-security-closure
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
