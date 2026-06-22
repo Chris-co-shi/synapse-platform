@@ -17,6 +17,8 @@ jobs:
   gateway-p0-security:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      gateway-failure-summary: ${{ steps.gateway-verify.outputs.failure-summary }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -40,14 +42,25 @@ jobs:
         run: |
           java -version
           mvn -version
-          mkdir -p target/ci-logs
+          mkdir -p .ci-logs
 
       - name: Verify Gateway reactor slice
+        id: gateway-verify
         shell: bash
         run: |
-          set -o pipefail
-          mvn -B -ntp -pl synapse-gateway-platform -am clean verify 2>&1 \
-            | tee target/ci-logs/gateway-verify.log
+          set +e
+          mvn -B -ntp -pl synapse-gateway-platform -am clean verify \
+            > .ci-logs/gateway-verify.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            grep -E '^\[ERROR\]|Rule [0-9]+:|Failed to execute goal' \
+              .ci-logs/gateway-verify.log | tail -n 30 \
+              | base64 --wrap=0 > .ci-logs/gateway-failure-summary.b64 || true
+            echo "failure-summary=$(cat .ci-logs/gateway-failure-summary.b64)" >> "$GITHUB_OUTPUT"
+            tail -n 80 .ci-logs/gateway-verify.log
+            exit "$status"
+          fi
+          tail -n 20 .ci-logs/gateway-verify.log
 
       - name: Verify Resource security slice with mandatory Redis container
         shell: bash
@@ -55,7 +68,7 @@ jobs:
           set -o pipefail
           mvn -B -ntp -Dsynapse.test.redis.required=true \
             -pl synapse-resource-platform/synapse-resource-server -am clean verify 2>&1 \
-            | tee target/ci-logs/resource-verify.log
+            | tee .ci-logs/resource-verify.log
 
       - name: Inspect Gateway dependency tree
         shell: bash
@@ -63,13 +76,13 @@ jobs:
           set -o pipefail
           mvn -B -ntp -pl synapse-gateway-platform dependency:tree \
             -DoutputFile=target/gateway-dependency-tree.txt 2>&1 \
-            | tee target/ci-logs/dependency-tree-command.log
+            | tee .ci-logs/dependency-tree-command.log
           cp synapse-gateway-platform/target/gateway-dependency-tree.txt \
-            target/ci-logs/gateway-dependency-tree.txt
-          cat target/ci-logs/gateway-dependency-tree.txt
+            .ci-logs/gateway-dependency-tree.txt
+          cat .ci-logs/gateway-dependency-tree.txt
           if grep -E \
             'spring-boot-starter-web:|spring-boot-starter-jdbc:|spring-webmvc:|spring-jdbc:|mybatis|druid|com.indigo.synapse:synapse-data:|com.indigo.synapse:synapse-mybatis-plus:|com.indigo.synapse:synapse-datasource:|com.indigo.synapse.platform:.*-server:' \
-            target/ci-logs/gateway-dependency-tree.txt; then
+            .ci-logs/gateway-dependency-tree.txt; then
             echo 'Forbidden Gateway dependency detected.' >&2
             exit 1
           fi
@@ -79,7 +92,7 @@ jobs:
         run: |
           set -o pipefail
           mvn -B -ntp -Dsynapse.test.redis.required=true clean verify 2>&1 \
-            | tee target/ci-logs/full-reactor-verify.log
+            | tee .ci-logs/full-reactor-verify.log
 
       - name: Check patch whitespace
         run: git diff --check origin/main...HEAD
@@ -89,5 +102,20 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gateway-p0-verification-logs
-          path: target/ci-logs
-          if-no-files-found: warn
+          path: .ci-logs
+          if-no-files-found: error
+
+  gateway-failure-diagnostic:
+    needs: gateway-p0-security
+    if: always() && needs.gateway-p0-security.result == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print concise Gateway failure
+        env:
+          FAILURE_SUMMARY: ${{ needs.gateway-p0-security.outputs.gateway-failure-summary }}
+        run: |
+          if [ -n "$FAILURE_SUMMARY" ]; then
+            echo "$FAILURE_SUMMARY" | base64 --decode
+          else
+            echo 'Gateway failure summary was not produced.'
+          fi
