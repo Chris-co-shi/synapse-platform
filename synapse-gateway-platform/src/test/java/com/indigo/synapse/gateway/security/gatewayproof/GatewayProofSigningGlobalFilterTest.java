@@ -154,7 +154,7 @@ class GatewayProofSigningGlobalFilterTest {
         }
     }
 
-    private static MockServerWebExchange routedExchange(org.springframework.http.server.reactive.ServerHttpRequest request) {
+    private static MockServerWebExchange routedExchange(MockServerHttpRequest request) {
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
         Route route = Route.async()
                 .id("test-route")
