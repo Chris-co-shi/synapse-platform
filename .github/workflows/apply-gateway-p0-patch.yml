@@ -20,7 +20,7 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
 
-      - name: Reconstruct and apply patch
+      - name: Reconstruct and apply source patch
         shell: bash
         run: |
           set -euo pipefail
@@ -28,11 +28,17 @@ jobs:
           actual_sha="$(sha256sum /tmp/gateway-p0.patch | cut -d' ' -f1)"
           test "$actual_sha" = "b15de0f0949dbb79be4dd80008c4a371e53b9326165138e429c9385ec885610e"
           git apply --index /tmp/gateway-p0.patch
+
+          # GITHUB_TOKEN cannot push workflow-file mutations. Keep workflows unchanged here;
+          # the authenticated GitHub connector will apply those files separately.
+          git restore --source=HEAD --staged --worktree .github/workflows/codex-source-export.yml
+          git rm --cached .github/workflows/gateway-p0-security.yml
+          rm .github/workflows/gateway-p0-security.yml
+
           git rm .github/codex/gateway-p0.part-*
-          git rm .github/workflows/apply-gateway-p0-patch.yml
           git diff --cached --check
 
-      - name: Commit implementation
+      - name: Commit implementation source
         shell: bash
         run: |
           set -euo pipefail
