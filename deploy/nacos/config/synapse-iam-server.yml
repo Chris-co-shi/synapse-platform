@@ -1,0 +1,8 @@
+server:
+  port: ${SERVER_PORT:8100}
+
+synapse:
+  security:
+    resource-server:
+      issuer-uri: ${IAM_ISSUER_URI:http://127.0.0.1:8100}
+      jwk-set-uri: ${IAM_JWK_SET_URI:http://127.0.0.1:8100/oauth2/jwks}
