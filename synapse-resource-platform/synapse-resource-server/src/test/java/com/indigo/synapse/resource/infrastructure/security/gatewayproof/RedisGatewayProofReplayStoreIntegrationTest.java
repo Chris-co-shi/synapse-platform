@@ -3,6 +3,7 @@ package com.indigo.synapse.resource.infrastructure.security.gatewayproof;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -42,6 +43,14 @@ class RedisGatewayProofReplayStoreIntegrationTest {
         connectionFactory.start();
         firstTemplate = template(connectionFactory);
         secondTemplate = template(connectionFactory);
+    }
+
+    @BeforeEach
+    void clearReplayKeys() {
+        Set<String> keys = firstTemplate.keys("synapse:security:gateway-proof:replay:*");
+        if (keys != null && !keys.isEmpty()) {
+            firstTemplate.delete(keys);
+        }
     }
 
     @AfterAll
