@@ -1,0 +1,68 @@
+name: Gateway P0 Security
+
+on:
+  push:
+    branches:
+      - main
+      - codex/gateway-p0-security-closure
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  gateway-p0-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21 and Maven repository credentials
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Show build environment
+        run: |
+          java -version
+          mvn -version
+
+      - name: Verify Gateway reactor slice
+        run: mvn -B -ntp -pl synapse-gateway-platform -am clean verify
+
+      - name: Verify Resource security slice with mandatory Redis container
+        run: >-
+          mvn -B -ntp -Dsynapse.test.redis.required=true
+          -pl synapse-resource-platform/synapse-resource-server -am clean verify
+
+      - name: Inspect Gateway dependency tree
+        run: |
+          mvn -B -ntp -pl synapse-gateway-platform dependency:tree \
+            -DoutputFile=target/gateway-dependency-tree.txt
+          cat synapse-gateway-platform/target/gateway-dependency-tree.txt
+          if grep -E \
+            'spring-boot-starter-web:|spring-boot-starter-jdbc:|spring-webmvc:|spring-jdbc:|mybatis|druid|com.indigo.synapse:synapse-data:|com.indigo.synapse:synapse-mybatis-plus:|com.indigo.synapse:synapse-datasource:|com.indigo.synapse.platform:.*-server:' \
+            synapse-gateway-platform/target/gateway-dependency-tree.txt; then
+            echo 'Forbidden Gateway dependency detected.' >&2
+            exit 1
+          fi
+
+      - name: Verify full reactor
+        run: mvn -B -ntp -Dsynapse.test.redis.required=true clean verify
+
+      - name: Check patch whitespace
+        run: git diff --check origin/main...HEAD
