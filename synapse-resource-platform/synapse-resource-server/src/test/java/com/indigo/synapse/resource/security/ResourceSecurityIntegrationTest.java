@@ -292,12 +292,13 @@ class ResourceSecurityIntegrationTest {
         NimbusJwtEncoder encoder = new NimbusJwtEncoder(
                 new ImmutableJWKSet<SecurityContext>(new JWKSet(rsaKey)));
         Instant now = Instant.now();
+        Instant issuedAt = spec.expired() ? now.minusSeconds(600) : now.minusSeconds(10);
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
                 .issuer(spec.issuer())
                 .subject("jwt-user")
                 .audience(List.of(spec.audience()))
-                .issuedAt(now.minusSeconds(10))
-                .notBefore(now.minusSeconds(10))
+                .issuedAt(issuedAt)
+                .notBefore(issuedAt)
                 .expiresAt(spec.expired() ? now.minusSeconds(300) : now.plusSeconds(300))
                 .claim("token_type", "ACCESS_TOKEN")
                 .claim("principal_type", "USER")
