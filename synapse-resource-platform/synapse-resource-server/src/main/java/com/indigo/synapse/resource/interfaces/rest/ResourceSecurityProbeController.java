@@ -5,7 +5,6 @@ import com.indigo.synapse.core.context.OperationContext;
 import com.indigo.synapse.core.context.OperationContextHolder;
 import com.indigo.synapse.security.context.AuthenticatedPrincipal;
 import com.indigo.synapse.security.context.CurrentPrincipalContext;
-import com.indigo.synapse.security.permission.PermissionChecker;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,12 +22,6 @@ public class ResourceSecurityProbeController {
     /** P0 验收权限。 */
     public static final String READ_PERMISSION = "resource:security:read";
 
-    private final PermissionChecker permissionChecker;
-
-    public ResourceSecurityProbeController(PermissionChecker permissionChecker) {
-        this.permissionChecker = permissionChecker;
-    }
-
     /**
      * 仅要求 JWT 与 GatewayProof 均有效。
      *
@@ -40,13 +33,12 @@ public class ResourceSecurityProbeController {
     }
 
     /**
-     * 额外要求 Token 权限快照包含 {@value READ_PERMISSION}。
+     * 额外权限约束由 Resource SecurityFilterChain 在进入 Controller 前执行。
      *
      * @return 固定验收响应
      */
     @GetMapping("/permission")
     public ProbeResponse permissionEndpoint() {
-        permissionChecker.require(READ_PERMISSION);
         return new ProbeResponse("ok");
     }
 
