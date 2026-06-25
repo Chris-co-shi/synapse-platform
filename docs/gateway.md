@@ -66,14 +66,14 @@ Token 格式、签名、有效期、`nbf`、issuer、audience、token type 或 r
 /actuator/health/**
 /actuator/info
 /error
-/iam/.well-known/**
-/iam/oauth2/token
+/iam/auth/login
+/iam/auth/refresh
 /iam/oauth2/jwks
 ```
 
 未公开整个 `/iam/**` 或 `/oauth2/**`。白名单匹配 Gateway 对外路径；`StripPrefix=1` 发生在路由转发阶段，不改变安全链看到的外部路径。
 
-当前 IAM Server 尚未实现 OAuth2 Token、JWK 和 discovery 生产端点，上述 IAM 路径是为后续 IAM 能力预留的明确白名单，不代表端点已经可用。当前测试只验证 Gateway 不会错误返回 401；下游不存在时仍可能返回 503。
+`/iam/auth/login` 和 `/iam/auth/refresh` 是当前管理端认证协议的匿名入口，`/iam/oauth2/jwks` 用于发布验签公钥。标准 `/iam/oauth2/token` 与 `/iam/.well-known/**` 在对应 OAuth2/OIDC 能力实现并完成安全评审前保持受保护状态。公开路径只表示 Gateway 不要求用户 Access Token；IAM 仍需按端点策略验证 GatewayProof 或其他服务端约束。
 
 ## 4. GatewayProof 协议
 
