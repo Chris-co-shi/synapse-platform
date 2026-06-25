@@ -1,15 +1,10 @@
 spring:
   datasource:
     dynamic:
-#      # dynamic-datasource 是否启用
-#      enabled: true
-      # 默认数据源名称
+      enabled: true
       primary: master
-      # 指定不存在的数据源时直接报错
       strict: true
-      # 应用关闭时优雅销毁连接池
       grace-destroy: true
-      # Druid 全局连接池参数
       druid:
         initial-size: 2
         min-idle: 2
@@ -24,14 +19,12 @@ spring:
         min-evictable-idle-time-millis: 300000
         keep-alive: true
         pool-prepared-statements: false
-      # 实际数据源集合
       datasource:
         master:
           type: com.alibaba.druid.pool.DruidDataSource
           driver-class-name: org.postgresql.Driver
           url: jdbc:postgresql://${DB_HOST:127.0.0.1}:${DB_PORT:5432}/${DB_NAME:synapse_iam}
           username: ${DB_USERNAME:postgres}
-          password: ${DB_PASSWORD:123456}
   cloud:
     nacos:
       discovery:
@@ -45,4 +38,3 @@ synapse:
   oauth2:
     production: false
     key-id: synapse-dev
-
