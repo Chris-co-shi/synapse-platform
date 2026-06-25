@@ -132,14 +132,12 @@ synapse:
         - /actuator/health
         - /actuator/health/**
         - /actuator/info
-        - /iam/.well-known/**
-        - /iam/oauth2/token
-        - /iam/oauth2/jwks
         - /error
         - /iam/auth/login
         - /iam/auth/refresh
+        - /iam/oauth2/jwks
   gateway:
     proof:
       enabled: ${GATEWAY_PROOF_ENABLED:true}
       gateway-id: ${GATEWAY_ID:synapse-gateway}
-      secret: ${GATEWAY_PROOF_SECRET:PmxXVO1nY+GXtfjb5izL9f4DYrwtgwSdVUaaDAHH/nA=}
+      secret: ${GATEWAY_PROOF_SECRET:}
