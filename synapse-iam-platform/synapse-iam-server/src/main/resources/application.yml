@@ -40,6 +40,7 @@ management:
 
 synapse:
   security:
+    pr
     resource-server:
       enabled: true
       issuer-uri: http://127.0.0.1:8100

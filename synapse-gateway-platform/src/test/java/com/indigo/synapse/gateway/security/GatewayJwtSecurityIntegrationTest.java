@@ -2,6 +2,7 @@ package com.indigo.synapse.gateway.security;
 
 import com.indigo.synapse.gateway.SynapseGatewayApplication;
 import org.springframework.context.ApplicationContext;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -60,11 +61,21 @@ class GatewayJwtSecurityIntegrationTest {
 
     @Test
     void shouldAllowHealthAndExplicitIamPublicPathsWithoutUserToken() {
-        client().get().uri("/actuator/health").exchange().expectStatus().isOk();
-        client().get().uri("/actuator/health/readiness").exchange().expectStatus().isOk();
-        assertThat(statusOf("/iam/oauth2/token")).isNotEqualTo(HttpStatus.UNAUTHORIZED);
-        assertThat(statusOf("/iam/oauth2/jwks")).isNotEqualTo(HttpStatus.UNAUTHORIZED);
-        assertThat(statusOf("/iam/.well-known/openid-configuration")).isNotEqualTo(HttpStatus.UNAUTHORIZED);
+        client().get()
+                .uri("/actuator/health")
+                .exchange()
+                .expectStatus()
+                .isOk();
+
+        client().get()
+                .uri("/actuator/health/readiness")
+                .exchange()
+                .expectStatus()
+                .isOk();
+
+        assertPublicEndpoint(HttpMethod.POST, "/iam/oauth2/token");
+        assertPublicEndpoint(HttpMethod.GET, "/iam/oauth2/jwks");
+        assertPublicEndpoint(HttpMethod.GET, "/iam/.well-known/openid-configuration");
     }
 
     @Test
@@ -179,5 +190,19 @@ class GatewayJwtSecurityIntegrationTest {
             return new Jwt(token, issuedAt, expiresAt,
                     Map.of("alg", "none"), claims);
         }
+    }
+
+
+    private void assertPublicEndpoint(HttpMethod method, String path) {
+        HttpStatusCode status = client()
+                .method(method)
+                .uri(path)
+                .exchange()
+                .returnResult(Void.class)
+                .getStatus();
+
+        assertThat(status)
+                .as("%s %s should not be rejected by Gateway authentication", method, path)
+                .isNotEqualTo(HttpStatus.UNAUTHORIZED);
     }
 }
