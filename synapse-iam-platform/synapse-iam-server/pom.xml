@@ -48,6 +48,14 @@
         </dependency>
         <dependency>
             <groupId>com.indigo.synapse</groupId>
+            <artifactId>synapse-mybatis-plus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.indigo.synapse</groupId>
+            <artifactId>synapse-datasource</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.indigo.synapse</groupId>
             <artifactId>synapse-audit</artifactId>
         </dependency>
         <dependency>

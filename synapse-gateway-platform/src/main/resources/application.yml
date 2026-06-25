@@ -100,7 +100,7 @@ spring:
                 - StripPrefix=1
 
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${SERVER_PORT:20000}
   shutdown: graceful
 
 management:
@@ -133,11 +133,10 @@ synapse:
         - /actuator/health/**
         - /actuator/info
         - /error
-        - /iam/.well-known/**
-        - /iam/oauth2/token
-        - /iam/oauth2/jwks
+        - /iam/auth/login
+        - /iam/auth/refresh
   gateway:
     proof:
       enabled: ${GATEWAY_PROOF_ENABLED:true}
       gateway-id: ${GATEWAY_ID:synapse-gateway}
-      secret: ${GATEWAY_PROOF_SECRET:}
+      secret: ${GATEWAY_PROOF_SECRET:PmxXVO1nY+GXtfjb5izL9f4DYrwtgwSdVUaaDAHH/nA=}

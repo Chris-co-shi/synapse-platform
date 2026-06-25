@@ -40,14 +40,15 @@ management:
 
 synapse:
   security:
-
     resource-server:
       enabled: true
       issuer-uri: http://127.0.0.1:8100
       jwk-set-uri: http://127.0.0.1:8100/oauth2/jwks
       audiences:
         - synapse-platform
+      denylist-enabled: false
+      permit-paths:
+        - /auth/login
+        - /auth/refresh
   time:
     default-zone: UTC
-  cloud:
-    enabled: true
