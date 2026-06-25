@@ -1,16 +1,15 @@
 package com.indigo.synapse.gateway.security;
 
 import com.indigo.synapse.gateway.SynapseGatewayApplication;
-import org.springframework.context.ApplicationContext;
-import org.springframework.http.HttpMethod;
-import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
@@ -19,6 +18,7 @@ import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtValidationException;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
+import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerResponse;
@@ -60,7 +60,7 @@ class GatewayJwtSecurityIntegrationTest {
     private ApplicationContext applicationContext;
 
     @Test
-    void shouldAllowHealthAndExplicitIamPublicPathsWithoutUserToken() {
+    void shouldAllowHealthAndCurrentIamPublicPathsWithoutUserToken() {
         client().get()
                 .uri("/actuator/health")
                 .exchange()
@@ -73,15 +73,23 @@ class GatewayJwtSecurityIntegrationTest {
                 .expectStatus()
                 .isOk();
 
-        assertPublicEndpoint(HttpMethod.POST, "/iam/oauth2/token");
+        assertPublicEndpoint(HttpMethod.POST, "/iam/auth/login");
+        assertPublicEndpoint(HttpMethod.POST, "/iam/auth/refresh");
         assertPublicEndpoint(HttpMethod.GET, "/iam/oauth2/jwks");
-        assertPublicEndpoint(HttpMethod.GET, "/iam/.well-known/openid-configuration");
+    }
+
+    @Test
+    void shouldProtectIamEndpointsOutsideTheExplicitPublicSet() {
+        assertUnauthorizedEndpoint(HttpMethod.GET, "/iam/auth/me");
+        assertUnauthorizedEndpoint(HttpMethod.POST, "/iam/auth/logout");
+        assertUnauthorizedEndpoint(HttpMethod.GET, "/iam/test");
+        assertUnauthorizedEndpoint(HttpMethod.POST, "/iam/oauth2/token");
+        assertUnauthorizedEndpoint(HttpMethod.GET, "/iam/.well-known/openid-configuration");
     }
 
     @Test
     void shouldUseExactlyOneSecurityChainAndProtectBusinessRouteNamespaces() {
         assertThat(applicationContext.getBeansOfType(SecurityWebFilterChain.class)).hasSize(1);
-        client().get().uri("/iam/test").exchange().expectStatus().isUnauthorized();
         client().get().uri("/resource/test").exchange().expectStatus().isUnauthorized();
     }
 
@@ -118,12 +126,30 @@ class GatewayJwtSecurityIntegrationTest {
                 .exchange().expectStatus().isForbidden();
     }
 
-    private HttpStatusCode statusOf(String path) {
-        return client().get().uri(path).exchange().returnResult(Void.class).getStatus();
-    }
-
     private WebTestClient client() {
         return webTestClient;
+    }
+
+    private void assertPublicEndpoint(HttpMethod method, String path) {
+        HttpStatusCode status = client()
+                .method(method)
+                .uri(path)
+                .exchange()
+                .returnResult(Void.class)
+                .getStatus();
+
+        assertThat(status)
+                .as("%s %s should not be rejected by Gateway authentication", method, path)
+                .isNotEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    private void assertUnauthorizedEndpoint(HttpMethod method, String path) {
+        client()
+                .method(method)
+                .uri(path)
+                .exchange()
+                .expectStatus()
+                .isUnauthorized();
     }
 
     /**
@@ -190,19 +216,5 @@ class GatewayJwtSecurityIntegrationTest {
             return new Jwt(token, issuedAt, expiresAt,
                     Map.of("alg", "none"), claims);
         }
-    }
-
-
-    private void assertPublicEndpoint(HttpMethod method, String path) {
-        HttpStatusCode status = client()
-                .method(method)
-                .uri(path)
-                .exchange()
-                .returnResult(Void.class)
-                .getStatus();
-
-        assertThat(status)
-                .as("%s %s should not be rejected by Gateway authentication", method, path)
-                .isNotEqualTo(HttpStatus.UNAUTHORIZED);
     }
 }
