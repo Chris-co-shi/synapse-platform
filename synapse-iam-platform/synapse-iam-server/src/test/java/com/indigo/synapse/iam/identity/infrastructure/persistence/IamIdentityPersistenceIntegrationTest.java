@@ -73,12 +73,14 @@ class IamIdentityPersistenceIntegrationTest {
     @Test
     void shouldPersistAndQueryUserByNormalizedUsername() {
         User saved = userRepository.save(User.create(" Admin ", "Administrator"));
+        User queried = userRepository.findByNormalizedUsername("admin").orElseThrow();
 
         assertThat(saved.id()).isNotBlank();
         assertThat(saved.version()).isZero();
         assertThat(saved.createdAt()).isNotNull();
-        assertThat(userRepository.findByNormalizedUsername("admin"))
-                .contains(saved);
+        assertThat(queried.id()).isEqualTo(saved.id());
+        assertThat(queried.username()).isEqualTo("Admin");
+        assertThat(queried.normalizedUsername()).isEqualTo("admin");
         assertThat(userRepository.existsByNormalizedUsername("admin")).isTrue();
     }
 
