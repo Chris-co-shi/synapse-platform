@@ -5,25 +5,23 @@
 | Item | Value |
 | --- | --- |
 | Audience | 架构师、安全负责人、核心研发、测试、实施和运维人员 |
-| Purpose | 定义 V1 的认证、Token、授权执行、可信入口、会话撤销和安全审计基线 |
-| Scope | Management Console、Gateway、IAM、Resource、Audit 及所有受保护微服务 |
-| Status | Review |
+| Purpose | 定义 V1 的认证、Token、授权快照、可信入口、会话撤销和安全审计基线 |
+| Scope | Management Console、Gateway、IAM、Resource、Audit、Config 及所有受保护微服务 |
+| Status | Accepted |
 
-本文描述 V1 必须达到的目标架构，不代表所有能力已经实现。实际完成状态必须由源码、自动化测试和发布记录证明。
+本文定义 V1 必须达到的目标架构，不代表相关能力已经实现。实际完成状态必须由源码、自动化测试和发布记录证明。
 
 ## 1. Security Principles
 
-V1 遵循以下原则：
-
 - 默认拒绝，显式放行；
 - Gateway 是统一入口，但不是唯一安全执行点；
-- IAM 是身份和授权事实源，但不是所有权限执行点；
-- Resource 定义资源与权限目录，不保存主体授权关系；
+- IAM 是身份、会话和授权快照的事实源；
+- Resource 定义资源与权限目录；
 - 每个受保护服务独立验证 Access Token；
-- 每个服务执行自己的接口、资源和数据权限；
+- 每个服务执行自身接口、资源和数据权限；
 - Management Console 和内部网络均不视为可信；
 - Token、密码、私钥和 Client Secret 不进入日志；
-- 签名、claim、撤销、GatewayProof 和权限检查失败时默认拒绝。
+- Redis 授权快照、GatewayProof 和权限检查失败时默认拒绝，只有明确的短时只读降级例外。
 
 ## 2. Trust Boundaries
 
@@ -31,8 +29,8 @@ V1 遵循以下原则：
 Browser / External Client
   ↓ HTTPS
 Gateway
-  ↓ Bearer Token + GatewayProof
-IAM / Resource / Audit / File / Message / Task
+  ↓ Opaque Bearer Token + GatewayProof
+IAM / Resource / Audit / Config / File / Message / Task
   ↓
 PostgreSQL / Redis / Nacos / RocketMQ
 ```
@@ -41,120 +39,145 @@ V1 Docker Compose 默认只对外暴露 Management Console 和 Gateway 所需端
 
 内部网络隔离不能替代 Token 验证、GatewayProof 验证或服务端授权。
 
-## 3. Token Model
+## 3. Access Token Model
 
-### 3.1 Access Token
+### 3.1 Opaque Access Token
 
-V1 使用 IAM 签发的非对称签名 JWT Access Token。
+V1 使用 IAM 生成的高熵 Opaque Access Token。
 
-Access Token：
+Token 本身只是不可预测的 Bearer 字符串，不携带用户、角色、权限、菜单、路由或其他业务信息。
 
-- 用于 Gateway 和各 Resource Server 的请求认证；
-- 不在 IAM 业务数据库中逐条持久化；
-- 使用唯一 `jti` 支持撤销；
-- 使用稳定且不可变的 `sub` 表达主体；
-- 必须验证签名、有效期、issuer、audience、token type 和 required claims；
-- 使用较短有效期，具体 TTL 在 IAM 详细设计中确定。
+IAM 对原始 Token 执行安全摘要，并在 Redis 中保存授权快照。原始 Token 不写入数据库、Redis value、日志或审计 payload。
 
-概念性 claim 示例：
+授权快照至少表达：
 
-```json
-{
-  "iss": "https://iam.example",
-  "sub": "1900000000000000001",
-  "aud": ["synapse-platform"],
-  "iat": 0,
-  "nbf": 0,
-  "exp": 0,
-  "jti": "unique-token-id",
-  "token_type": "ACCESS_TOKEN",
-  "principal_type": "USER",
-  "client_id": "synapse-admin",
-  "roles": ["PLATFORM_ADMIN"],
-  "permissions": [
-    "iam:user:read",
-    "resource:menu:read"
-  ]
-}
+- token identifier 或 token hash；
+- subject id；
+- principal type；
+- client id；
+- session id；
+- roles；
+- permissions；
+- issuer；
+- audiences；
+- authorization version；
+- issued at；
+- expires at；
+- active / revoked 状态。
+
+Redis key 的具体命名属于实现细节，由 IAM 和 Framework 设计确认。
+
+### 3.2 Validation
+
+Gateway 和每个受保护服务通过 Framework 统一适配验证 Access Token：
+
+```text
+Bearer Token
+  -> 计算安全摘要
+  -> 从 Redis 查询授权快照
+  -> 校验状态、时间、issuer、audience 和 principal type
+  -> 构建 Authentication 与 authorities
+  -> 执行权限检查
 ```
 
-该示例只表达语义。实际 claim 名称、集合格式和 authority 映射以 Synapse Framework 的常量、validator 和 converter 为协议事实来源。
+V1 不在每个请求中调用 IAM introspection 接口，也不直接查询 IAM 数据库。
 
-Access Token 不携带：
+Redis 是运行时授权快照的权威来源。Framework 负责统一 Token 摘要、快照读取、校验和主体转换协议，Platform 不在各服务中重复实现。
 
-- 菜单树；
-- 页面路由；
-- 按钮元数据；
-- 资源描述；
-- 密码、手机号、私钥或 Client Secret；
-- 完成认证与授权不需要的个人信息。
-
-### 3.2 Roles and Permissions
-
-V1 在用户 Access Token 中携带签发时的角色和权限码快照。
-
-- Resource 是权限码定义的事实来源；
-- IAM 是角色权限关系的事实来源；
-- 各服务根据已验证 Token 中的权限码执行授权；
-- Framework 权限检查不在运行时查询 IAM 数据库；
-- 角色只用于组织授权，接口安全最终使用权限码表达。
-
-当权限数量超过可接受的 Token 体积时，后续可以演进为 `authorization_version` 与 Redis 授权快照，但不作为 V1 初始方案。
-
-### 3.3 Principal Types
+### 3.3 User and Client Tokens
 
 V1 至少区分：
 
-- `USER`：用户通过管理端或交互式认证获得 Token；
-- `CLIENT`：平台服务或可信客户端通过受支持的客户端授权获得 Token。
+- `USER`：用户通过管理端登录获得 Access Token；
+- `CLIENT`：平台内部服务或可信机器客户端通过 Client Credentials 获得 Access Token。
 
-Client Token 不伪装成用户 Token。需要保留用户上下文的同步调用可以传播原始用户 Bearer Token；纯服务调用使用独立 Client 身份。
+用户 Token 和 Client Token 使用相同的 Opaque Token + Redis 快照机制，通过 `principal_type` 区分。
 
-## 4. Refresh Token and Session Model
+Client Token 不伪装成用户 Token，也不能默认继承平台管理员权限。
 
-V1 使用高熵、不可预测的 Opaque Refresh Token。
+### 3.4 TTL
+
+V1 默认值：
+
+| Item | Default | Reason |
+| --- | ---: | --- |
+| Access Token | 15 分钟 | 限制 Bearer Token 泄露窗口，同时避免管理端过于频繁刷新 |
+| Refresh Token 空闲有效期 | 7 天 | 兼顾管理端使用体验和长期凭据暴露风险 |
+| 最大会话时长 | 30 天 | 即使持续刷新，也要求用户周期性重新认证 |
+| GatewayProof 有效窗口 | 60 秒 | 容忍有限网络与时钟偏差，同时控制重放窗口 |
+| Redis 故障本地降级窗口 | 30 秒 | 只覆盖短暂抖动，不把旧授权长期当作有效依据 |
+
+所有值必须可配置，但生产环境修改需要经过安全评审。
+
+## 4. Authorization Snapshot
+
+Resource 是权限码定义的事实来源；IAM 是用户、角色和角色权限关系的事实来源。
+
+用户登录、刷新或授权关系发生变化时，IAM 计算新的授权快照并写入 Redis。
+
+运行时授权依据 Redis 快照中的权限码，而不是在每个请求中查询 IAM 或 Resource。
+
+授权快照不包含：
+
+- 菜单树；
+- 页面路由；
+- 按钮展示元数据；
+- 权限说明文本；
+- 密码、手机号、私钥或 Client Secret。
+
+Resource 根据已验证主体的权限码生成当前用户导航，但菜单过滤不能代替服务端权限校验。
+
+## 5. Refresh Token and Session
+
+V1 使用高熵 Opaque Refresh Token。
 
 Refresh Token：
 
-- 明文只返回给合法客户端；
-- IAM 持久化层只保存安全摘要；
+- 明文只返回合法客户端；
+- IAM 数据库只保存安全摘要；
 - 绑定用户、Client、会话和过期时间；
-- 每次成功刷新后执行 rotation；
-- 旧 Refresh Token 再次使用时视为重放；
-- 重放检测后撤销对应会话族，并记录安全事件。
+- 每次成功刷新执行 rotation；
+- 旧 Token 再次使用视为重放；
+- 重放后撤销对应 token family 和会话；
+- 并发刷新必须通过原子事务保证只有一次成功。
 
-会话至少需要表达：
+会话至少表达：
 
 - session id；
 - refresh token family id；
 - subject id；
 - client id；
-- token hash；
-- issued / expires time；
+- refresh token hash；
+- issued / idle expires / absolute expires time；
 - active / revoked / expired / reuse-detected 状态；
 - replaced token reference；
 - revoke reason 和时间。
 
-刷新操作必须是原子事务，避免并发刷新同时成功。
+## 6. Login, Refresh and Logout
 
-## 5. Login, Refresh and Logout
-
-### 5.1 Login
+### 6.1 Login
 
 ```text
 Client -> Gateway -> IAM
   -> GatewayProof verification
   -> credential and account status verification
-  -> role and permission snapshot calculation
-  -> Access Token + Opaque Refresh Token issuance
-  -> security audit
+  -> role and permission calculation
+  -> create Redis authorization snapshot
+  -> issue Opaque Access Token + Opaque Refresh Token
+  -> write reliable security audit Outbox event
 ```
 
-登录失败对外返回统一错误，不泄露账号是否存在、禁用、锁定或密码错误等内部差异。
+登录失败对外使用统一错误，不泄露账号是否存在、禁用、锁定或密码错误。
 
-登录入口必须支持限流、失败计数、临时锁定和安全审计。具体阈值由 IAM 设计确认。
+失败策略：
 
-### 5.2 Refresh
+- 15 分钟统计窗口；
+- 连续失败 5 次后锁定 15 分钟；
+- 管理员可以手动解锁；
+- 按账号和来源 IP 双维度限流；
+- 所有失败进入安全审计事件。
+
+### 6.2 Refresh
 
 ```text
 Client -> Gateway -> IAM
@@ -163,71 +186,116 @@ Client -> Gateway -> IAM
   -> validate session and client
   -> detect reuse
   -> rotate Refresh Token
-  -> recalculate current roles and permissions
-  -> issue new Access Token
-  -> security audit
+  -> recalculate roles and permissions
+  -> replace Redis authorization snapshot
+  -> issue new Opaque Access Token
+  -> write reliable security audit event
 ```
 
-刷新时重新计算当前授权，因此普通角色或权限变更最迟在下一次刷新后生效。
+刷新后旧 Access Token 快照应删除或标记无效。普通权限调整可以通过更新相关授权快照立即生效，不必等待 Token 自然过期。
 
-### 5.3 Logout
+### 6.3 Logout
 
 登出至少执行：
 
 - 撤销当前 Refresh Token 会话；
-- 将当前 Access Token `jti` 加入 denylist，保留至 Token 原始过期时间；
+- 删除或禁用当前 Access Token 授权快照；
+- 清理相应的本地授权缓存；
 - 记录退出和撤销事件。
 
-“退出当前会话”和“退出全部会话”应作为不同操作设计。
+“退出当前会话”和“退出全部会话”是不同操作。
 
-## 6. Immediate Revocation
+## 7. Immediate Revocation
 
-普通授权调整可以在重新登录或刷新 Token 后生效。
-
-以下高风险变化必须支持立即撤销：
+以下变化必须立即更新或删除相关 Redis 授权快照：
 
 - 用户被禁用或锁定；
+- 角色或权限发生变化；
 - 管理员或敏感角色被回收；
 - 凭据泄露或主动强制下线；
 - Refresh Token 重放；
 - Client 被禁用；
 - 安全人员执行全会话撤销。
 
-立即撤销基于：
+如果存在本地应急缓存，撤销在异常情况下可能存在最多 30 秒的低风险只读窗口。写操作和敏感操作不得使用该降级缓存。
 
-- Access Token `jti` denylist；
-- Refresh Token 会话状态；
-- 用户或 Client 的会话级撤销。
+## 8. Redis Availability and Recovery
 
-Gateway 和所有受保护服务必须执行一致的 denylist 检查。撤销存储不可用时，生产环境默认 fail closed。
+Redis 是 P0 安全基础设施。
 
-## 7. Gateway Security Boundary
+Docker Compose 至少需要：
+
+- 开启 AOF 持久化；
+- 使用持久化 Volume；
+- 配置 `maxmemory-policy=noeviction`；
+- 配置 healthcheck 和自动重启；
+- 提供数据目录、恢复和故障排查说明；
+- 禁止授权快照因内存淘汰被静默删除。
+
+客户端应使用有限次数快速重连和明确超时，不能无限等待或无限重试。
+
+### 8.1 Normal Mode
+
+Redis 正常时，每个受保护请求以 Redis 快照作为权威验证来源。
+
+服务可以把最近一次成功验证的快照写入本地 Caffeine 缓存，但该缓存只用于 Redis 故障时的有限降级，不作为正常授权来源。
+
+### 8.2 Degraded Mode
+
+Redis 不可用时：
+
+| Request Type | Behavior |
+| --- | --- |
+| 已缓存、低风险、只读 GET | 距离最近一次 Redis 成功验证不超过 30 秒时允许 |
+| 未缓存 Token | 返回 503 |
+| 登录、刷新、退出 | 返回 503 |
+| 用户、角色、权限、资源和 Config 修改 | 返回 503 |
+| 文件上传、任务执行和其他写操作 | 返回 503 |
+| 管理与敏感接口 | 返回 503 |
+
+30 秒窗口结束后，所有受保护请求失败关闭。
+
+服务不能把 Redis 故障误判为 401 或 403；基础设施不可用应返回统一 503，并记录安全和运行告警。
+
+### 8.3 Recovery
+
+Redis 恢复后：
+
+- 客户端自动恢复连接；
+- 立即恢复 Redis 权威校验；
+- 清空或重新校验故障期间使用的本地缓存；
+- 检查 Redis 数据和 TTL 是否完整；
+- 验证登录、刷新、撤销和权限修改链路；
+- 记录故障持续时间和降级请求数量。
+
+## 9. Gateway Security Boundary
 
 Gateway 负责：
 
-- 提取和验证 Bearer Access Token；
-- 最小公开路径白名单；
-- 清理所有外部 `X-Synapse-Gateway-*` Header；
+- 提取 Opaque Bearer Token；
+- 从 Redis 验证授权快照；
+- 维护最小公开路径白名单；
+- 清理外部 `X-Synapse-Gateway-*` Header；
 - 原样透传 Authorization Bearer Token；
 - 签发 GatewayProof；
 - 传播 traceId；
-- 返回统一入口级 401。
+- 返回入口级 401 或 Redis 故障 503。
 
 Gateway 不负责：
 
-- 查询用户、角色或菜单；
+- 查询用户、角色、菜单或 IAM 数据库；
 - 执行业务 permission 判断；
-- 传播或信任 `X-User-Id`、`X-Roles`、`X-Permissions` 等身份 Header；
+- 注入或信任用户、角色和权限 Header；
 - 代替下游验证 Token；
-- 代替下游返回业务授权 403。
+- 保留 `gateway:admin` 权限例外。
 
-公开路径仅表示 Gateway 不要求用户 Access Token，IAM 仍需验证 GatewayProof、Client 和端点自身安全约束。
+Actuator 和运维端点通过网络隔离、暴露控制和运维安全措施保护。
 
-## 8. GatewayProof
+## 10. GatewayProof
 
-JWT 证明调用主体身份；GatewayProof 证明请求经过可信 Gateway。两者不能互相替代。
+经过验证的 Opaque Access Token 授权快照证明当前 Bearer Token 对应的主体和权限；GatewayProof 证明请求经过可信 Gateway。两者不能互相替代。
 
-GatewayProof 使用 Framework 定义的协议，至少绑定：
+GatewayProof 使用 Framework 协议，至少绑定：
 
 - Gateway 与可信 Route 标识；
 - 时间戳；
@@ -237,118 +305,114 @@ GatewayProof 使用 Framework 定义的协议，至少绑定：
 - 规范化 query；
 - Bearer Token 指纹。
 
-下游服务验证：
+下游验证签名、时间窗口、route audience、path、query、method、Token 指纹和 nonce 重放。
 
-- 签名；
-- 时间窗口；
-- route audience；
-- path、query 和 method；
-- Token 指纹绑定；
-- nonce 重放。
+GatewayProof Secret 只能通过环境变量或 Secret 管理注入，不得写入仓库、镜像、普通配置或日志。
 
-GatewayProof 使用的 Secret 必须通过环境变量或 Secret 管理注入，不能写入仓库、镜像、普通配置或日志。
+GatewayProof 不用于任意服务间调用。非 Gateway 内部调用使用 Client Credentials Token 和正式服务契约。
 
-GatewayProof 不用于任意服务间调用。非 Gateway 内部调用使用独立 Client Token 和正式服务契约。
+## 11. Resource Server Enforcement
 
-## 9. Resource Server Enforcement
+IAM、Resource、Audit、Config、File、Message、Task 等受保护服务都必须：
 
-IAM、Resource、Audit、File、Message、Task 等受保护服务都作为 OAuth2 Resource Server：
-
-1. 独立验证 JWT 签名和 claims；
-2. 检查 Access Token denylist；
+1. 提取 Opaque Access Token；
+2. 通过 Framework 查询并验证 Redis 授权快照；
 3. 对经 Gateway 的外部请求验证 GatewayProof；
-4. 从已验证 Token 构建主体和 authorities；
+4. 构建主体和 authorities；
 5. 执行接口 permission；
 6. 执行必要的资源归属和数据权限；
 7. 记录关键允许、拒绝和异常结果。
 
-缺失或无效 Token 返回 401；Token 有效但权限不足返回 403。
+缺失或无效 Token 返回 401；Token 有效但权限不足返回 403；Redis 等安全基础设施不可用返回 503。
 
-菜单隐藏、按钮禁用和前端路由守卫不能代替以上步骤。
+## 12. OIDC and RS256
 
-## 10. Resource and IAM Authorization Flow
+RS256 不用于 V1 Access Token。
 
-```text
-Resource 注册资源和 permission_code
-  -> IAM 为角色保存 permission_code
-  -> 用户登录或刷新
-  -> IAM 计算权限快照并签发 Access Token
-  -> Resource 根据 Token 生成导航
-  -> 目标服务根据 Token 权限码执行授权
-  -> Audit 记录授权和访问过程
-```
+RS256 用于需要签名的 OIDC ID Token：
 
-运行时每个业务请求不得同步调用 IAM 和 Resource 查询权限。
+- IAM 持有 RSA 私钥；
+- JWK 端点只发布公钥；
+- 每把密钥具有稳定且非默认的 `kid`；
+- 开发、测试、beta 和生产密钥相互隔离；
+- 开发环境挂载独立开发密钥；
+- 生产环境通过 Docker Secret、受限文件挂载或外部 Secret 系统注入；
+- 生产禁止启动时生成临时长期密钥；
+- 轮换期间保留旧公钥，直到旧 ID Token 全部过期；
+- 私钥不进入 Git、镜像、日志、异常和普通业务表。
 
-## 11. Key and JWK Management
+环境 issuer 使用每个环境唯一的 IAM 外部地址。V1 统一 audience 为 `synapse-platform`。
 
-- IAM 持有签名私钥；Gateway 和 Resource Server 只获取公钥；
-- JWK 端点只发布验证所需的公钥材料；
-- 每把密钥必须具有稳定且非默认的 `kid`；
-- 本地、测试、beta 和生产密钥必须隔离；
-- 生产环境禁止启动时临时生成长期使用的签名密钥；
-- 轮换期间保留旧公钥，直到旧 Token 全部自然过期；
-- 私钥不进入 Git、容器镜像、日志、异常和普通业务表。
+## 13. Client Credentials
 
-具体签名算法、密钥来源和轮换周期由 IAM 详细设计确认。
+V1 支持 Client Credentials，但范围限定为：
 
-## 12. Management Console Security
+- 平台内部服务；
+- 受信任机器客户端；
+- 管理员显式创建和授权的 Client。
+
+不提供任意第三方自助注册。
+
+Client Secret 只保存安全哈希；Client Token 使用 Opaque Access Token + Redis 快照，并标记 `principal_type=CLIENT`。
+
+## 14. Management Console Security
 
 Management Console 是不可信客户端：
 
-- 所有权限判断必须由服务端执行；
-- Access Token 通过 Authorization Header 发送；
-- V1 不采用基于 Cookie 的平台登录会话；
-- Access Token 应尽量只保存在内存；
-- Refresh Token 的浏览器持久化策略必须在前端安全设计中单独确认；
-- 不得未经评审默认写入 `localStorage`；
-- 禁止把 Token 输出到日志、埋点、URL、错误页面或前端状态快照。
+- Access Token 只保存在内存；
+- Refresh Token 保存在 `sessionStorage`；
+- 不使用 Cookie 登录会话；
+- 不使用 `localStorage` 保存 Token；
+- 页面刷新可以从 `sessionStorage` 恢复会话；
+- 关闭标签页后需要重新登录；
+- Token 不进入 URL、日志、埋点、错误页面或状态快照；
+- 必须使用严格 CSP、依赖治理、输出编码和 XSS 防护。
 
-Gateway 统一维护允许的 CORS Origin。生产环境不得使用无约束通配配置。
+在不使用 HttpOnly Cookie 的浏览器应用中，Refresh Token 无法完全规避 XSS 风险，因此前端安全控制属于 V1 验收内容。
 
-## 13. Security Audit Events
+## 15. CORS
 
-V1 至少记录：
+CORS 由 Gateway 统一配置：
+
+- 生产环境只允许明确的 Management Console Origin；
+- 开发环境只允许明确配置的 localhost Origin；
+- 禁止 `*`；
+- 允许 Header 至少包含 `Authorization`、`Content-Type` 和 `X-Request-Id`；
+- 不启用 credentials，因为 V1 不使用 Cookie；
+- 下游服务不单独开放宽松 CORS。
+
+## 16. Security Audit Events
+
+V1 至少可靠记录：
 
 - 登录成功与失败；
 - 用户锁定、解锁、禁用和启用；
-- Access Token 签发；
+- Access Token 与 Refresh Token 签发；
 - Refresh 成功、失败和重放；
-- 登出、会话撤销和 denylist；
+- 登出和会话撤销；
 - Client 创建、禁用和 Secret 轮换；
 - 角色授权与权限回收；
 - Resource 权限码新增、禁用和废弃；
+- Config 国际化和字典变更；
 - GatewayProof 校验失败和 nonce 重放；
-- 401 和关键 403；
-- 密钥轮换和异常密钥加载。
+- 401、关键 403 和 Redis 降级；
+- ID Token 密钥轮换和异常密钥加载。
 
-日志不得记录密码、完整 Token、Refresh Token、私钥、Client Secret、GatewayProof Secret 或完整签名材料。
+安全事件通过本地 Outbox + RocketMQ 可靠发送给 Audit。日志不得记录完整 Token、Refresh Token、密码、私钥、Client Secret、GatewayProof Secret 或完整签名材料。
 
-## 14. Current Implementation Warning
+## 17. Current Implementation Warning
 
 以下能力只有在真实实现和测试完成后才能标记为可用：
 
-- Access Token 签发完整闭环；
+- Opaque Access Token 生成和 Redis 快照；
+- Framework Opaque Token Resource Server 适配；
 - Refresh Token 持久化、rotation 和 reuse detection；
-- JWK 端点和密钥轮换；
-- 角色与权限 claim 装载；
-- 真实 Access Token denylist；
+- 授权变更后的快照更新和撤销；
+- Redis 故障 30 秒只读降级；
+- OIDC ID Token、JWK 和密钥轮换；
 - 所有下游服务的 GatewayProof 与 nonce replay 验证；
-- Client Credentials 服务身份；
-- 管理端安全存储策略。
+- Client Credentials；
+- Management Console Token 存储策略；
+- 安全 Outbox 与 Audit 消费闭环。
 
-Framework 中的 Noop、默认实现或仅声明依赖，不构成生产能力。
-
-## 15. Pending Detailed Decisions
-
-以下细节进入 IAM、Gateway 和前端设计文档确认：
-
-- Access Token TTL；
-- Refresh Token TTL 和最大会话时长；
-- issuer 和 audience 具体值；
-- JWT 签名算法和生产密钥来源；
-- 登录失败阈值与锁定窗口；
-- denylist Redis key 与不可用策略细节；
-- 浏览器 Refresh Token 保存和页面刷新恢复策略；
-- Client Credentials 支持范围；
-- CORS allowlist 和外部域名策略。
+Noop、默认实现、仅声明依赖或设计文档，不构成生产能力。
