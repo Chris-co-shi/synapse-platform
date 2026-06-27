@@ -1,116 +1,134 @@
 # Synapse Platform
 
-Synapse Platform 是面向制造业数字化系统的企业级数字化平台基座，用于为 MES、WMS、QMS、EMS、MOM、ERP 周边、IoT 与第三方业务系统提供统一身份、权限、入口、日志、审计、监控、任务、文件、消息、集成与部署支撑。
+> Enterprise Digital Platform Foundation for Manufacturing Systems.
 
-它不是具体业务系统，也不是 Spring Cloud Demo。它的目标是成为一个可真实落地、支持私有化部署、支持云原生演进、能够长期维护的平台产品。
+Synapse Platform 是面向制造业数字化系统的企业级平台基座，为 MES、WMS、QMS、EMS、MOM、ERP 周边、IoT 与第三方业务系统提供统一身份、权限、入口、日志、审计、监控、任务、文件、消息、集成与部署支撑。
 
-## 当前阶段
+它不是具体业务系统，也不是 Spring Cloud Demo；它的目标是成为可以真实落地、支持私有化部署、支持云原生演进、可长期维护的平台产品。
 
-当前分支处于：
+---
 
-```text
-Architecture Sprint v1
-```
-
-本阶段优先完成架构设计与 ADR，不进入 Controller、Service、Repository、Entity、Mapper、API 参数等实现细节。
-
-目标流程：
+## What is Synapse Platform?
 
 ```text
-Architecture -> ADR -> Design -> Coding -> Testing
+Business Systems
+MES / WMS / QMS / EMS / MOM / ERP / IoT / External Systems
+        ↑
+        │  API / Client / Event / Webhook / Gateway
+        │
+Synapse Platform
+Gateway / IAM / Audit / Monitor / Task / File / Message / Integration
+        ↑
+        │
+Synapse Framework
+Web / Security / OAuth2 / Data / Messaging / Observability
 ```
 
-## 核心定位
+Synapse Platform 提供企业公共能力，但不承载业务领域模型。
+
+---
+
+## Core Capabilities
+
+| Area | Capability |
+| --- | --- |
+| Identity | IAM, OAuth2, OIDC, Token, Client |
+| Authorization | RBAC, Permission, Resource, Server-side Enforcement |
+| Entry | Gateway, Routing, Trusted Entry, Header Sanitization |
+| Traceability | Audit, Operation Log, Security Log, TraceId |
+| Platform Services | Task, File, Message, Config, Monitor, Integration |
+| Delivery | Docker, VM, Kubernetes, Private Deployment |
+
+---
+
+## Current Status
+
+| Item | Status |
+| --- | --- |
+| Product Documentation | Draft |
+| Architecture | Draft |
+| Development | In Progress |
+| Testing | To Be Defined |
+| Deployment | To Be Defined |
+| Delivery | To Be Defined |
+
+Current branch focus:
 
 ```text
-Synapse Platform = 企业基座 / 控制面 / 共享平台能力
-Synapse Framework = 技术底座 / 通用开发框架
-Business Systems  = 自治业务系统
+Product Documentation v1
 ```
 
-Platform 提供公共能力，但不承载业务领域模型。
+The current goal is to establish product, architecture, specification, testing, deployment and delivery documentation before large-scale coding.
 
-业务系统保持自治，通过 API、Client、事件、Webhook、Connector、Gateway 与统一身份权限体系接入 Platform。
+---
 
-## Architecture Sprint 文档
+## Documentation
 
-v1 架构文档入口：
+Start here:
 
-- [Architecture Sprint v1](docs/v1/README.md)
+- [Synapse Platform Documentation v1](docs/v1/README.md)
+- [Documentation Rules](docs/v1/02-specification/documentation-rules.md)
 - [Vision](docs/v1/00-overview/vision.md)
 - [Architecture Principles](docs/v1/00-overview/architecture-principles.md)
-- [Glossary](docs/v1/00-overview/glossary.md)
-- [Roadmap](docs/v1/00-overview/roadmap.md)
-- [ADR-001：Synapse Platform 项目定位与边界](docs/v1/01-adr/ADR-001-platform-positioning.md)
+- [ADR-001: Platform Positioning](docs/v1/01-adr/ADR-001-platform-positioning.md)
 - [System Context and Boundary](docs/v1/02-architecture/system-context-and-boundary.md)
-- [Architecture Freeze](docs/v1/decisions/architecture-freeze.md)
 
-## V1 一期目标
+---
 
-一期目标是完成企业平台最小闭环：
+## Documentation Structure
 
 ```text
-用户登录
-  -> OAuth2/OIDC Token 签发
-  -> Gateway 统一入口
-  -> 下游资源服务独立验证
-  -> RBAC 权限模型
-  -> 服务端权限兜底
-  -> 操作日志与安全审计
-  -> 业务系统具备标准接入方式
+docs/v1
+├── 00-product        # Product positioning, scope, users, roadmap
+├── 01-architecture   # Overall architecture, module boundary, security, network
+├── 02-specification  # Coding, API, logging, database, documentation standards
+├── 03-design         # Gateway, IAM, Audit, Task, File, Message, Integration design
+├── 04-testing        # Testing strategy, acceptance, security, performance
+├── 05-deployment     # Docker, VM, Kubernetes, upgrade, backup, DR
+├── 06-delivery       # Installation, operation, maintenance, troubleshooting
+├── 07-reference      # Glossary, ports, env vars, permissions, dependencies
+└── 99-adr            # Architecture Decision Records
 ```
 
-一期必须完成：
+---
 
-- RBAC；
-- OAuth2.0 / OIDC 基础闭环；
-- Gateway 统一入口；
-- IAM 登录、刷新、登出、当前用户；
-- 日志与审计闭环；
-- 平台接入规范；
-- 基础部署口径。
+## Boundary
 
-## 边界原则
+Synapse Platform does not implement:
 
-Platform 不负责：
+- MES production domain;
+- WMS inventory domain;
+- QMS quality domain;
+- EMS energy domain;
+- ERP core business domain;
+- business system database;
+- business-specific workflow and rules.
 
-- MES 生产业务；
-- WMS 库存业务；
-- QMS 质量业务；
-- EMS 能源业务；
-- MOM 制造运营业务；
-- ERP 核心业务；
-- 业务系统数据库；
-- 业务系统领域模型；
-- 业务系统流程编排。
+Business systems remain autonomous and integrate with Synapse Platform through contracts, clients, events, webhooks and gateway entry.
 
-Framework 不负责：
+---
 
-- IAM 业务；
-- Gateway 服务；
-- 业务 Controller；
-- 业务 Entity / Mapper / Repository；
-- Platform 数据库业务模型。
+## Development Rules
 
-## 开发规范
+- [Repository Rules](AGENTS.md)
+- [Gateway Rules](synapse-gateway-platform/AGENTS.md)
+- [IAM Rules](synapse-iam-platform/AGENTS.md)
+- [Resource Rules](synapse-resource-platform/AGENTS.md)
+- [Config Rules](synapse-config-platform/AGENTS.md)
+- [Audit Rules](synapse-audit-platform/AGENTS.md)
+- [File Rules](synapse-file-platform/AGENTS.md)
+- [Message Rules](synapse-message-platform/AGENTS.md)
+- [Task Rules](synapse-task-platform/AGENTS.md)
+- [Workflow Rules](synapse-workflow-platform/AGENTS.md)
+- [Integration Rules](synapse-integration-platform/AGENTS.md)
+- [MDM Rules](synapse-mdm-platform/AGENTS.md)
+- [Report Rules](synapse-report-platform/AGENTS.md)
+- [Monitor Rules](synapse-monitor-platform/AGENTS.md)
 
-- [仓库级开发规则](AGENTS.md)
-- [Gateway 模块规则](synapse-gateway-platform/AGENTS.md)
-- [IAM 模块规则](synapse-iam-platform/AGENTS.md)
-- [Resource 模块规则](synapse-resource-platform/AGENTS.md)
-- [Config 模块规则](synapse-config-platform/AGENTS.md)
-- [Audit 模块规则](synapse-audit-platform/AGENTS.md)
-- [File 模块规则](synapse-file-platform/AGENTS.md)
-- [Message 模块规则](synapse-message-platform/AGENTS.md)
-- [Task 模块规则](synapse-task-platform/AGENTS.md)
-- [Workflow 模块规则](synapse-workflow-platform/AGENTS.md)
-- [Integration 模块规则](synapse-integration-platform/AGENTS.md)
-- [MDM 模块规则](synapse-mdm-platform/AGENTS.md)
-- [Report 模块规则](synapse-report-platform/AGENTS.md)
-- [Monitor 模块规则](synapse-monitor-platform/AGENTS.md)
+---
 
-## 安全说明
+## Security Notice
 
-禁止提交真实密码、Token、GatewayProof secret、Registry 凭据、私钥或 `.env`。
+Never commit real passwords, tokens, GatewayProof secrets, registry credentials, private keys or `.env` files.
 
-GatewayProof 不能替代 JWT；Gateway 认证成功不能成为下游服务跳过 Token 验证、资源权限或数据权限判断的理由。
+GatewayProof does not replace JWT. Gateway authentication must not be used as a reason for downstream services to skip token validation, resource authorization or data permission checks.
