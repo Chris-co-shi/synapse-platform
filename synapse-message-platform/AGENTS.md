@@ -29,4 +29,7 @@ mvn -pl synapse-message-platform -am test
 
 ## 6. 相关文档
 
-- [模块边界与服务设计](../docs/02-模块边界与服务设计.md)
+- [V1 范围](../docs/v1/00-product/v1-scope.md)
+- [服务边界](../docs/v1/01-architecture/service-boundary.md)
+- [安全架构](../docs/v1/01-architecture/security-architecture.md)
+- [通信架构](../docs/v1/01-architecture/communication-architecture.md)
