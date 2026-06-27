@@ -9,10 +9,11 @@
 1. [产品定义](00-product/product.md)
 2. [V1 范围与完成标准](00-product/v1-scope.md)
 3. [架构原则](01-architecture/architecture-principles.md)
-4. [系统上下文与边界](01-architecture/system-context-and-boundary.md)
-5. [文档规范](02-specification/documentation-rules.md)
-6. [术语表](07-reference/glossary.md)
-7. [ADR-001：产品定位与边界](99-adr/ADR-001-platform-positioning.md)
+4. [总体架构](01-architecture/overall-architecture.md)
+5. [系统上下文与边界](01-architecture/system-context-and-boundary.md)
+6. [文档规范](02-specification/documentation-rules.md)
+7. [术语表](07-reference/glossary.md)
+8. [ADR-001：产品定位与边界](99-adr/ADR-001-platform-positioning.md)
 
 ## V1 Baseline
 
@@ -24,6 +25,15 @@ V1 交付一个可运行的开源版本。
 - V1 不包含：Integration、Workflow、MDM、Report、AI Agent 平台和 Kubernetes 正式交付。
 
 完成标准：功能可用、测试通过、文档完整、可通过 Docker Compose 安装部署，并完成平台自身闭环。
+
+## Architecture Baseline
+
+- 保持独立微服务形态；
+- Gateway、IAM、Audit 为 P0 独立服务；
+- File、Message、Task 为 P1 独立服务；
+- V1 可共用一个 PostgreSQL 实例；
+- 每个服务使用独立 Schema、数据库账号和 Flyway migration；
+- 禁止跨 Schema 访问和跨服务共享数据模型。
 
 ## Structure
 
@@ -50,4 +60,4 @@ docs/v1
 
 ## Current Focus
 
-V1 产品范围已经确认。下一步进入总体架构设计和服务边界讨论。
+产品范围和总体架构基线已经确认。下一步进入服务边界设计。
