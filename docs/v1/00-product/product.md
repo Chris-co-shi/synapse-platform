@@ -73,12 +73,15 @@ V1 核心包括：
 
 - Gateway；
 - IAM；
+- Resource Center；
 - RBAC；
 - OAuth 2.0 / OpenID Connect；
-- Resource Server 安全；
+- 各微服务的 Resource Server 安全；
 - 操作日志、安全日志和审计日志；
 - 平台管理端前端；
 - Docker Compose 部署。
+
+Resource Center 负责应用、菜单、按钮、API 资源和权限码目录；IAM 负责用户、角色和授权关系；各微服务执行自身权限；Audit 负责追溯。
 
 File、Message 和 Task 属于低优先级 V1 范围。Monitor 和 Config 在 V1 仅保留基础能力。Integration 不进入 V1。
 
