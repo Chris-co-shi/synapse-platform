@@ -11,25 +11,38 @@
 3. [架构原则](01-architecture/architecture-principles.md)
 4. [总体架构](01-architecture/overall-architecture.md)
 5. [系统上下文与边界](01-architecture/system-context-and-boundary.md)
-6. [文档规范](02-specification/documentation-rules.md)
-7. [术语表](07-reference/glossary.md)
-8. [ADR-001：产品定位与边界](99-adr/ADR-001-platform-positioning.md)
+6. [服务边界](01-architecture/service-boundary.md)
+7. [文档规范](02-specification/documentation-rules.md)
+8. [术语表](07-reference/glossary.md)
+9. [ADR-001：产品定位与边界](99-adr/ADR-001-platform-positioning.md)
+10. [ADR-002：IAM 与 Resource 服务边界](99-adr/ADR-002-iam-resource-boundary.md)
 
 ## V1 Baseline
 
 V1 交付一个可运行的开源版本。
 
-- P0：Gateway、IAM、RBAC、OAuth 2.0 / OIDC、Resource Server 安全、操作日志、安全日志、审计日志、管理端前端、Docker Compose；
+- P0：Gateway、IAM、Resource、Audit、RBAC、OAuth 2.0 / OIDC、服务端鉴权、管理端前端和 Docker Compose；
 - P1：File、Message、Task；
 - 基础能力：Monitor、Config；
 - V1 不包含：Integration、Workflow、MDM、Report、AI Agent 平台和 Kubernetes 正式交付。
 
 完成标准：功能可用、测试通过、文档完整、可通过 Docker Compose 安装部署，并完成平台自身闭环。
 
+## Authorization Boundary
+
+```text
+Resource  -> 定义资源与权限目录
+IAM       -> 管理主体与授权关系
+各服务     -> 独立验证 Token 并执行权限
+Audit     -> 记录资源、授权和访问行为
+```
+
+Gateway 只处理统一入口并透传 Bearer Token，不向下游注入用户、角色或权限 Header。
+
 ## Architecture Baseline
 
 - 保持独立微服务形态；
-- Gateway、IAM、Audit 为 P0 独立服务；
+- Gateway、IAM、Resource、Audit 为 P0 独立服务；
 - File、Message、Task 为 P1 独立服务；
 - V1 可共用一个 PostgreSQL 实例；
 - 每个服务使用独立 Schema、数据库账号和 Flyway migration；
@@ -60,4 +73,4 @@ docs/v1
 
 ## Current Focus
 
-产品范围和总体架构基线已经确认。下一步进入服务边界设计。
+产品范围、总体架构和核心服务边界已经确认。下一步进入安全架构设计。
