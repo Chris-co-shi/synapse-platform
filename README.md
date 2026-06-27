@@ -1,134 +1,103 @@
+<div align="center">
+
 # Synapse Platform
 
-> Enterprise Digital Platform Foundation for Manufacturing Systems.
+### Build Your Enterprise Digital Foundation.
 
-Synapse Platform 是面向制造业数字化系统的企业级平台基座，为 MES、WMS、QMS、EMS、MOM、ERP 周边、IoT 与第三方业务系统提供统一身份、权限、入口、日志、审计、监控、任务、文件、消息、集成与部署支撑。
+企业数字化平台，为企业提供统一身份、安全、入口、治理与共享平台能力。
 
-它不是具体业务系统，也不是 Spring Cloud Demo；它的目标是成为可以真实落地、支持私有化部署、支持云原生演进、可长期维护的平台产品。
+**Open Source · Self-hosted · Unified · Simple · Evolvable**
+
+[产品定义](docs/v1/00-product/product.md) · [架构文档](docs/v1/01-architecture/system-context-and-boundary.md) · [文档首页](docs/v1/README.md)
+
+</div>
 
 ---
 
-## What is Synapse Platform?
+## Why Synapse Platform?
+
+企业在数字化建设初期，或者已经拥有多套彼此割裂的系统时，常常需要重复建设身份、权限、入口、日志、监控和任务等基础能力。
+
+Synapse Platform 希望帮助企业：
+
+- 建立统一的数字化基础设施；
+- 对分散系统进行统一接入和治理；
+- 支持企业本地化与私有化部署；
+- 以更直观、更简单的方式持续演进。
+
+> 技术应该降低企业数字化的复杂度，而不是增加复杂度。
+
+## Product Boundary
+
+Synapse Platform 是完整的平台产品，但不是 ERP、MES、WMS、QMS、EMS、MOM 或其他业务系统。
+
+业务系统继续拥有自己的领域模型、业务流程、数据库和发布节奏。Platform 提供公共能力和统一治理基础。
 
 ```text
 Business Systems
 MES / WMS / QMS / EMS / MOM / ERP / IoT / External Systems
         ↑
-        │  API / Client / Event / Webhook / Gateway
+        │ API / Client / Event / Webhook / Gateway
         │
 Synapse Platform
-Gateway / IAM / Audit / Monitor / Task / File / Message / Integration
+Identity / Access / Entry / Governance / Shared Platform Services
         ↑
         │
 Synapse Framework
 Web / Security / OAuth2 / Data / Messaging / Observability
 ```
 
-Synapse Platform 提供企业公共能力，但不承载业务领域模型。
+## V1 Foundation
 
----
+当前已经确认的 V1 基础目标：
 
-## Core Capabilities
+- RBAC 权限模型；
+- OAuth 2.0 / OpenID Connect 基础闭环；
+- 统一入口与平台访问闭环；
+- 身份登录、令牌、刷新和退出闭环；
+- 日志与审计闭环。
 
-| Area | Capability |
-| --- | --- |
-| Identity | IAM, OAuth2, OIDC, Token, Client |
-| Authorization | RBAC, Permission, Resource, Server-side Enforcement |
-| Entry | Gateway, Routing, Trusted Entry, Header Sanitization |
-| Traceability | Audit, Operation Log, Security Log, TraceId |
-| Platform Services | Task, File, Message, Config, Monitor, Integration |
-| Delivery | Docker, VM, Kubernetes, Private Deployment |
-
----
+这些是产品目标，不表示已经全部完成。实际完成状态以测试和发布记录为准。
 
 ## Current Status
 
-| Item | Status |
+| Area | Status |
 | --- | --- |
-| Product Documentation | Draft |
+| Product Definition | Draft |
 | Architecture | Draft |
 | Development | In Progress |
-| Testing | To Be Defined |
-| Deployment | To Be Defined |
-| Delivery | To Be Defined |
+| Testing Baseline | To Be Defined |
+| Deployment Matrix | To Be Confirmed |
+| Delivery Baseline | To Be Defined |
 
-Current branch focus:
-
-```text
-Product Documentation v1
-```
-
-The current goal is to establish product, architecture, specification, testing, deployment and delivery documentation before large-scale coding.
-
----
+当前分支 `docs/v1` 聚焦产品、架构、规范、测试、部署与交付文档建设。
 
 ## Documentation
 
-Start here:
+| Document | Purpose |
+| --- | --- |
+| [Product](docs/v1/00-product/product.md) | 产品定位、价值、用户、边界和当前阶段 |
+| [Architecture Principles](docs/v1/01-architecture/architecture-principles.md) | 平台架构必须遵守的长期原则 |
+| [System Context & Boundary](docs/v1/01-architecture/system-context-and-boundary.md) | Platform 在企业数字化体系中的位置和边界 |
+| [Documentation Rules](docs/v1/02-specification/documentation-rules.md) | 文档真实性、评审、维护和 GitHub 门面规范 |
+| [Glossary](docs/v1/07-reference/glossary.md) | 产品与架构术语 |
+| [ADR-001](docs/v1/99-adr/ADR-001-platform-positioning.md) | 产品定位与边界的决策记录 |
+| [Documentation Home](docs/v1/README.md) | v1 产品文档导航 |
 
-- [Synapse Platform Documentation v1](docs/v1/README.md)
-- [Documentation Rules](docs/v1/02-specification/documentation-rules.md)
-- [Vision](docs/v1/00-overview/vision.md)
-- [Architecture Principles](docs/v1/00-overview/architecture-principles.md)
-- [ADR-001: Platform Positioning](docs/v1/01-adr/ADR-001-platform-positioning.md)
-- [System Context and Boundary](docs/v1/02-architecture/system-context-and-boundary.md)
-
----
-
-## Documentation Structure
-
-```text
-docs/v1
-├── 00-product        # Product positioning, scope, users, roadmap
-├── 01-architecture   # Overall architecture, module boundary, security, network
-├── 02-specification  # Coding, API, logging, database, documentation standards
-├── 03-design         # Gateway, IAM, Audit, Task, File, Message, Integration design
-├── 04-testing        # Testing strategy, acceptance, security, performance
-├── 05-deployment     # Docker, VM, Kubernetes, upgrade, backup, DR
-├── 06-delivery       # Installation, operation, maintenance, troubleshooting
-├── 07-reference      # Glossary, ports, env vars, permissions, dependencies
-└── 99-adr            # Architecture Decision Records
-```
-
----
-
-## Boundary
-
-Synapse Platform does not implement:
-
-- MES production domain;
-- WMS inventory domain;
-- QMS quality domain;
-- EMS energy domain;
-- ERP core business domain;
-- business system database;
-- business-specific workflow and rules.
-
-Business systems remain autonomous and integrate with Synapse Platform through contracts, clients, events, webhooks and gateway entry.
-
----
-
-## Development Rules
+## Repository Rules
 
 - [Repository Rules](AGENTS.md)
 - [Gateway Rules](synapse-gateway-platform/AGENTS.md)
 - [IAM Rules](synapse-iam-platform/AGENTS.md)
 - [Resource Rules](synapse-resource-platform/AGENTS.md)
-- [Config Rules](synapse-config-platform/AGENTS.md)
 - [Audit Rules](synapse-audit-platform/AGENTS.md)
 - [File Rules](synapse-file-platform/AGENTS.md)
 - [Message Rules](synapse-message-platform/AGENTS.md)
 - [Task Rules](synapse-task-platform/AGENTS.md)
-- [Workflow Rules](synapse-workflow-platform/AGENTS.md)
 - [Integration Rules](synapse-integration-platform/AGENTS.md)
-- [MDM Rules](synapse-mdm-platform/AGENTS.md)
-- [Report Rules](synapse-report-platform/AGENTS.md)
-- [Monitor Rules](synapse-monitor-platform/AGENTS.md)
 
----
+## Security
 
-## Security Notice
+不要提交真实密码、令牌、私钥、注册中心凭据、GatewayProof 密钥或 `.env` 文件。
 
-Never commit real passwords, tokens, GatewayProof secrets, registry credentials, private keys or `.env` files.
-
-GatewayProof does not replace JWT. Gateway authentication must not be used as a reason for downstream services to skip token validation, resource authorization or data permission checks.
+Gateway 完成入口认证不能成为下游资源服务跳过令牌验证、资源授权或数据权限检查的理由。
