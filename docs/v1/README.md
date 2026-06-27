@@ -12,10 +12,12 @@
 4. [总体架构](01-architecture/overall-architecture.md)
 5. [系统上下文与边界](01-architecture/system-context-and-boundary.md)
 6. [服务边界](01-architecture/service-boundary.md)
-7. [文档规范](02-specification/documentation-rules.md)
-8. [术语表](07-reference/glossary.md)
-9. [ADR-001：产品定位与边界](99-adr/ADR-001-platform-positioning.md)
-10. [ADR-002：IAM 与 Resource 服务边界](99-adr/ADR-002-iam-resource-boundary.md)
+7. [安全架构](01-architecture/security-architecture.md)
+8. [文档规范](02-specification/documentation-rules.md)
+9. [术语表](07-reference/glossary.md)
+10. [ADR-001：产品定位与边界](99-adr/ADR-001-platform-positioning.md)
+11. [ADR-002：IAM 与 Resource 服务边界](99-adr/ADR-002-iam-resource-boundary.md)
+12. [ADR-003：Token、会话与可信入口模型](99-adr/ADR-003-token-session-and-trust-boundary.md)
 
 ## V1 Baseline
 
@@ -38,6 +40,16 @@ Audit     -> 记录资源、授权和访问行为
 ```
 
 Gateway 只处理统一入口并透传 Bearer Token，不向下游注入用户、角色或权限 Header。
+
+## Security Baseline
+
+- Access Token 使用非对称签名 JWT；
+- Refresh Token 使用 Opaque Token、摘要存储、rotation 和重放检测；
+- Access Token 携带角色和权限码快照，不携带菜单或路由元数据；
+- Gateway 和所有受保护服务独立验证 Token；
+- GatewayProof 证明请求经过可信 Gateway，但不替代 JWT 或业务授权；
+- 高风险变更通过会话撤销和 `jti` denylist 立即生效；
+- Token、密码、私钥和 Client Secret 禁止进入日志。
 
 ## Architecture Baseline
 
@@ -73,4 +85,4 @@ docs/v1
 
 ## Current Focus
 
-产品范围、总体架构和核心服务边界已经确认。下一步进入安全架构设计。
+安全架构基线已经形成，仍有 TTL、issuer/audience、密钥来源和浏览器 Token 保存策略等细节待模块设计确认。下一步进入通信架构设计。
