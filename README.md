@@ -1,104 +1,96 @@
 # Synapse Platform
 
-Synapse Platform 是基于 Java 21、Spring Boot、Spring Cloud 和 Spring Cloud Alibaba 的企业级微服务平台。它通过 Maven 复用独立的 Synapse Framework，并承载 Gateway、IAM、文件、消息等可启动平台服务。
+Synapse Platform 是面向制造业数字化系统的企业级数字化平台基座，用于为 MES、WMS、QMS、EMS、MOM、ERP 周边、IoT 与第三方业务系统提供统一身份、权限、入口、日志、审计、监控、任务、文件、消息、集成与部署支撑。
 
-## 当前状态
+它不是具体业务系统，也不是 Spring Cloud Demo。它的目标是成为一个可真实落地、支持私有化部署、支持云原生演进、能够长期维护的平台产品。
 
-- 已建立 13 个一级平台模块。
-- Gateway 已实现单一 Reactive SecurityWebFilterChain、明确白名单、默认认证和保留管理命名空间 403 策略。
-- Gateway 会始终清理外部 `X-Synapse-Gateway-*` Header，并按 Framework 协议为最终下游请求签发绑定 Route audience 的 GatewayProof。
-- Gateway 提供 Java 21 非 root 镜像、Docker Compose 部署、健康检查和失败回滚。
-- `synapse-resource-server` 已作为首个下游完成独立 JWT、GatewayProof、Redis nonce replay store、CurrentPrincipalContext 和 OperationContext 验证闭环；其余模块仍处于不同建设阶段。
+## 当前阶段
 
-## 模块概览
+当前分支处于：
 
-| 模块 | 定位 |
-| --- | --- |
-| `synapse-gateway-platform` | 统一入口、Reactive JWT、路由、GatewayProof |
-| `synapse-iam-platform` | 认证、主体、授权模型和 Token 签发 |
-| `synapse-resource-platform` | 平台资源能力 |
-| `synapse-config-platform` | 平台配置服务 |
-| `synapse-audit-platform` | 平台审计服务 |
-| `synapse-file-platform` | 平台文件服务 |
-| `synapse-message-platform` | 平台消息服务 |
-| `synapse-task-platform` | 平台任务服务 |
-| `synapse-workflow-platform` | 平台工作流服务 |
-| `synapse-integration-platform` | 外部系统集成 |
-| `synapse-mdm-platform` | 主数据管理 |
-| `synapse-report-platform` | 平台报表服务 |
-| `synapse-monitor-platform` | 平台监控服务 |
-
-除 Gateway 外，每个一级模块包含 `api`、`client`、`server`：api 保存稳定契约，client 提供调用适配，server 承载启动入口与模块实现。
-
-## Framework 依赖事实
-
-当前事实以本地 `../synapse-framework` 根 POM、`synapse-bom`、源码和模块手册为准。
-
-- 根 POM import `com.indigo.synapse:synapse-bom:0.1.0-SNAPSHOT`。
-- Platform 应用按实际需要直接依赖 Spring Cloud Gateway、LoadBalancer、OpenFeign、Nacos Discovery/Config 等官方组件，不通过 Framework 聚合模块间接获取。
-- Framework 当前已删除 `synapse-cloud` 和 `synapse-file`。
-- 原 `synapse-mq` 已更名为 `synapse-messaging`。
-- Framework `synapse-messaging` 提供消息技术契约；Platform `synapse-message-platform` 是独立的业务消息服务，两者职责不同。
-- Gateway 使用 Framework 的 `synapse-webflux`、`synapse-security` 和 `synapse-oauth2-resource-server-webflux`。
-
-构建前应确保当前 Framework 构件可由本地 Maven 仓库或已配置的远程仓库解析。若使用 GitHub Packages，请在 Maven `settings.xml` 中配置访问凭据；凭据不得提交到本仓库。
-
-## 正式端口基线
-
-| 服务 | 端口 |
-| --- | --- |
-| Gateway | 8080 |
-| IAM | 8100 |
-| Message | 8200 |
-| File | 8300 |
-| Task | 8400 |
-
-仓库内正式 `application.yml`、Gateway Docker/Compose 和文档统一使用上述口径。自动化测试可以使用随机端口 `0`。外部 Nacos Data ID 若覆盖 `server.port` 或 IAM 地址，必须同步为同一口径；仓库不保存远端 Nacos 实例数据。
-
-## Gateway 快速验证
-
-全仓构建基线：
-
-```bash
-mvn validate
-mvn clean test
+```text
+Architecture Sprint v1
 ```
 
-Gateway 定向验证可使用模块 POM：
+本阶段优先完成架构设计与 ADR，不进入 Controller、Service、Repository、Entity、Mapper、API 参数等实现细节。
 
-```bash
-mvn -f synapse-gateway-platform/pom.xml clean test
-mvn -f synapse-gateway-platform/pom.xml dependency:tree
+目标流程：
+
+```text
+Architecture -> ADR -> Design -> Coding -> Testing
 ```
 
-本地运行需要可访问 IAM JWK 和 Nacos：
+## 核心定位
 
-```bash
-SPRING_PROFILES_ACTIVE=dev \
-NACOS_SERVER_ADDR=127.0.0.1:8848 \
-IAM_ISSUER_URI=http://127.0.0.1:8100 \
-IAM_JWK_SET_URI=http://127.0.0.1:8100/oauth2/jwks \
-GATEWAY_PROOF_SECRET='<at-least-32-byte-secret>' \
-mvn -f synapse-gateway-platform/pom.xml spring-boot:run
+```text
+Synapse Platform = 企业基座 / 控制面 / 共享平台能力
+Synapse Framework = 技术底座 / 通用开发框架
+Business Systems  = 自治业务系统
 ```
 
-dev、beta、prd 均默认开启 GatewayProof 签发，并始终清理所有外部 Gateway Header。启动时必须安全注入至少 32 字节 secret。
+Platform 提供公共能力，但不承载业务领域模型。
 
-Gateway Docker 镜像使用 Java 21 JRE、非 root 用户和最小运行 context。构建及 Compose 部署入口：
+业务系统保持自治，通过 API、Client、事件、Webhook、Connector、Gateway 与统一身份权限体系接入 Platform。
 
-```bash
-./scripts/docker/build-gateway-image.sh \
-  --repository registry.example.com/synapse/synapse-gateway \
-  --tag 0.1.0 \
-  --platform linux/amd64
+## Architecture Sprint 文档
 
-./scripts/docker/deploy-gateway.sh \
-  --repository registry.example.com/synapse/synapse-gateway \
-  --tag 0.1.0 \
-  --env-file deploy/docker/gateway/.env
+v1 架构文档入口：
+
+- [Architecture Sprint v1](docs/v1/README.md)
+- [Vision](docs/v1/00-overview/vision.md)
+- [Architecture Principles](docs/v1/00-overview/architecture-principles.md)
+- [Glossary](docs/v1/00-overview/glossary.md)
+- [Roadmap](docs/v1/00-overview/roadmap.md)
+- [ADR-001：Synapse Platform 项目定位与边界](docs/v1/01-adr/ADR-001-platform-positioning.md)
+- [System Context and Boundary](docs/v1/02-architecture/system-context-and-boundary.md)
+- [Architecture Freeze](docs/v1/decisions/architecture-freeze.md)
+
+## V1 一期目标
+
+一期目标是完成企业平台最小闭环：
+
+```text
+用户登录
+  -> OAuth2/OIDC Token 签发
+  -> Gateway 统一入口
+  -> 下游资源服务独立验证
+  -> RBAC 权限模型
+  -> 服务端权限兜底
+  -> 操作日志与安全审计
+  -> 业务系统具备标准接入方式
 ```
 
-完整配置、回滚和单实例限制见 [Gateway Docker 部署](deploy/docker/gateway/README.md)。
+一期必须完成：
+
+- RBAC；
+- OAuth2.0 / OIDC 基础闭环；
+- Gateway 统一入口；
+- IAM 登录、刷新、登出、当前用户；
+- 日志与审计闭环；
+- 平台接入规范；
+- 基础部署口径。
+
+## 边界原则
+
+Platform 不负责：
+
+- MES 生产业务；
+- WMS 库存业务；
+- QMS 质量业务；
+- EMS 能源业务；
+- MOM 制造运营业务；
+- ERP 核心业务；
+- 业务系统数据库；
+- 业务系统领域模型；
+- 业务系统流程编排。
+
+Framework 不负责：
+
+- IAM 业务；
+- Gateway 服务；
+- 业务 Controller；
+- 业务 Entity / Mapper / Repository；
+- Platform 数据库业务模型。
 
 ## 开发规范
 
@@ -117,15 +109,8 @@ Gateway Docker 镜像使用 Java 21 JRE、非 root 用户和最小运行 context
 - [Report 模块规则](synapse-report-platform/AGENTS.md)
 - [Monitor 模块规则](synapse-monitor-platform/AGENTS.md)
 
-## 架构与部署文档
-
-- [产品设计](docs/01-产品设计.md)
-- [模块边界与服务设计](docs/02-模块边界与服务设计.md)
-- [IAM 架构与阶段规划](docs/iam.md)
-- [Gateway 设计与安全模型](docs/gateway.md)
-- [Resource P0 安全验证](docs/resource-security.md)
-- [Gateway Docker 部署](deploy/docker/gateway/README.md)
-
 ## 安全说明
 
-禁止提交真实密码、Token、GatewayProof secret、Registry 凭据、私钥或 `.env`。GatewayProof 不能替代 JWT；下游 Resource Server 必须独立验证二者。
+禁止提交真实密码、Token、GatewayProof secret、Registry 凭据、私钥或 `.env`。
+
+GatewayProof 不能替代 JWT；Gateway 认证成功不能成为下游服务跳过 Token 验证、资源权限或数据权限判断的理由。
