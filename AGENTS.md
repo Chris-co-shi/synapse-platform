@@ -57,7 +57,18 @@ synapse-xxx-platform
 - 禁止将生产启动类放入 `bootstrap`、`boot`、`launcher` 或 `startup` 子包。
 - `api` 和 `client` 模块禁止存在生产启动类。
 
-## 7. 修改原则
+## 7. 数据与时间基线
+
+- PostgreSQL 17 是 V1 默认、推荐和实际验证数据库。
+- Framework 的其他数据库兼容不等于 Platform 已正式支持。
+- 每个服务使用独立 Schema、账号和 Flyway 历史。
+- 禁止跨 Schema SQL、跨服务数据库外键和共享持久化类型。
+- 真实时间点使用 UTC 语义与 Java `Instant`。
+- 业务日期使用 `LocalDate`，业务时区使用显式 IANA `ZoneId`。
+- 禁止依赖服务器默认时区解释业务时间。
+- 日期区间转换为 UTC 半开区间 `[start, end)`。
+
+## 8. 修改原则
 
 - 修改前先搜索并阅读相关规则、设计、接口和测试文档。
 - 优先最小修改和现有结构，不进行未授权的大规模重构。
@@ -65,7 +76,7 @@ synapse-xxx-platform
 - 当前事实优先于旧 README、历史任务和规划描述。
 - 代码说明、计划、总结和自查使用中文；命名遵循项目既有习惯。
 
-## 8. 最低验证
+## 9. 最低验证
 
 ```bash
 mvn validate
@@ -75,11 +86,11 @@ git diff --check
 
 模块规则可增加更严格验证。未执行的命令必须如实标记并说明原因。
 
-## 9. 完成报告
+## 10. 完成报告
 
 必须列出修改、新增、删除文件，核心实现，验证命令和结果，未完成事项、技术债与风险点。未获用户明确授权不得自动提交。
 
-## 10. 模块和专题索引
+## 11. 模块和专题索引
 
 - [V1 文档首页](docs/v1/README.md)
 - [V1 范围](docs/v1/00-product/v1-scope.md)
@@ -87,6 +98,7 @@ git diff --check
 - [服务边界](docs/v1/01-architecture/service-boundary.md)
 - [安全架构](docs/v1/01-architecture/security-architecture.md)
 - [通信架构](docs/v1/01-architecture/communication-architecture.md)
+- [数据架构](docs/v1/01-architecture/data-architecture.md)
 - [Gateway 模块规则](synapse-gateway-platform/AGENTS.md)
 - [Gateway Docker 部署](deploy/docker/gateway/README.md)
 - 其余模块规则位于对应一级模块目录的 `AGENTS.md`。
