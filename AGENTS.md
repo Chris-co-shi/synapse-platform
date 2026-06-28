@@ -34,7 +34,7 @@ synapse-xxx-platform
 - `api`：稳定跨服务契约，不依赖 client/server，不包含数据库实现。
 - `client`：调用适配，允许依赖对应 api，禁止依赖 server 或直接访问服务数据库。
 - `server`：启动入口与模块实现，允许依赖对应 api，禁止依赖自己的 client 或其他模块 server。
-- 跨服务调用通过 api/client 或消息契约完成，禁止共享 Entity、Mapper、Repository。
+- 跨服务调用通过 api/client 或消息契约完成，禁止共享业务 Entity、Mapper、Repository。
 
 ## 4. 依赖与基线
 
@@ -62,11 +62,19 @@ synapse-xxx-platform
 - PostgreSQL 17 是 V1 默认、推荐和实际验证数据库。
 - Framework 的其他数据库兼容不等于 Platform 已正式支持。
 - 每个服务使用独立 Schema、账号和 Flyway 历史。
-- 禁止跨 Schema SQL、跨服务数据库外键和共享持久化类型。
+- 禁止跨 Schema SQL、跨服务数据库外键和共享业务持久化类型。
+- 持久化 Entity 优先使用 Framework `synapse-mybatis-plus` 已提供的 `IdEntity`、`CreatedEntity`、`MutableEntity`、`VersionedEntity`、`ManagedEntity`。
+- Entity 按实际生命周期选择满足需求的最浅基类，不统一强制 `ManagedEntity`。
+- Domain Model、DTO、Command、Query 和 Event 禁止继承 MyBatis-Plus 实体基类。
+- 默认主键为 Java `String`、PostgreSQL `varchar(19)`、MyBatis-Plus `ASSIGN_ID`。
+- 技术乐观锁字段使用 `revision`；逻辑删除字段使用 `deleted`。
+- 独立 Schema 内的新表不重复服务名称前缀；既有表更名必须通过 Flyway migration，禁止只改 `@TableName`。
 - 真实时间点使用 UTC 语义与 Java `Instant`。
 - 业务日期使用 `LocalDate`，业务时区使用显式 IANA `ZoneId`。
 - 禁止依赖服务器默认时区解释业务时间。
 - 日期区间转换为 UTC 半开区间 `[start, end)`。
+
+详细规则见 [`docs/v1/02-specification/database-conventions.md`](docs/v1/02-specification/database-conventions.md)。
 
 ## 8. 修改原则
 
@@ -99,6 +107,7 @@ git diff --check
 - [安全架构](docs/v1/01-architecture/security-architecture.md)
 - [通信架构](docs/v1/01-architecture/communication-architecture.md)
 - [数据架构](docs/v1/01-architecture/data-architecture.md)
+- [数据库与持久化规范](docs/v1/02-specification/database-conventions.md)
 - [Gateway 模块规则](synapse-gateway-platform/AGENTS.md)
 - [Gateway Docker 部署](deploy/docker/gateway/README.md)
 - 其余模块规则位于对应一级模块目录的 `AGENTS.md`。
