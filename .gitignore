@@ -40,4 +40,8 @@ build/
 
 ### Docker deployment runtime state ###
 deploy/docker/gateway/.env
+deploy/docker/local-auth-loop/.env
 deploy/docker/gateway/.release/
+.env
+.env.local
+*.secret

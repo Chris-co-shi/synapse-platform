@@ -23,6 +23,7 @@
 15. [ADR-003：Token、会话与可信入口模型](99-adr/ADR-003-token-session-and-trust-boundary.md)
 16. [ADR-004：服务通信、Outbox 与 RocketMQ](99-adr/ADR-004-service-communication-and-outbox.md)
 17. [ADR-005：数据库、Redis 快照与时间模型](99-adr/ADR-005-database-redis-and-time-model.md)
+18. [Gateway-IAM 本地认证闭环测试记录](05-testing/gateway-iam-auth-loop-test-plan.md)
 
 ## V1 Baseline
 
@@ -100,7 +101,7 @@ docs/v1
 ├── 01-architecture
 ├── 02-specification
 ├── 03-design
-├── 04-testing
+├── 05-testing
 ├── 05-deployment
 ├── 06-delivery
 ├── 07-reference

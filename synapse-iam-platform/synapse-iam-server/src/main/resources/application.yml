@@ -71,6 +71,10 @@ synapse:
   time:
     default-zone: UTC
   iam:
+    bootstrap:
+      enabled: ${IAM_BOOTSTRAP_ENABLED:false}
+      username: ${IAM_BOOTSTRAP_USERNAME:}
+      password: ${IAM_BOOTSTRAP_PASSWORD:}
     auth:
       issuer: ${IAM_ISSUER_URI:http://127.0.0.1:8100}
       audiences:

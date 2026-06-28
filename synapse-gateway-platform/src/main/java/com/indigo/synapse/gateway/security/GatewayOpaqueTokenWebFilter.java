@@ -14,6 +14,7 @@ import com.indigo.synapse.web.core.trace.TraceIdGenerator;
 import com.indigo.synapse.webflux.exception.ReactiveWebErrorResponseWriter;
 import com.indigo.synapse.webflux.exception.WebFluxExceptionResponseFactory;
 import org.springframework.core.Ordered;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
@@ -88,6 +89,8 @@ public class GatewayOpaqueTokenWebFilter implements WebFilter, Ordered {
                 .onErrorResume(RedisConnectionFailureException.class,
                         ex -> write(exchange, new GatewayAuthInfrastructureException(ex)))
                 .onErrorResume(RedisSystemException.class,
+                        ex -> write(exchange, new GatewayAuthInfrastructureException(ex)))
+                .onErrorResume(QueryTimeoutException.class,
                         ex -> write(exchange, new GatewayAuthInfrastructureException(ex)));
     }
 
