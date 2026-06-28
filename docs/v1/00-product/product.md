@@ -115,7 +115,11 @@ Synapse Platform 不替代业务系统，也不承载具体业务领域。
 
 Docker Compose 是 V1 正式支持的部署方式。
 
-V1 默认基础设施包括 PostgreSQL、Redis、Nacos 和 RocketMQ。VM 和 Kubernetes 不作为 V1 正式交付阻断项。
+V1 默认基础设施包括 PostgreSQL、Redis、Nacos 和 RocketMQ。
+
+PostgreSQL 17 是 V1 默认、推荐和实际验证数据库。Framework 已提供部分其他数据库兼容能力，但在完成 Platform 级迁移、集成测试和部署验证前，不将其描述为 Platform 已正式支持。
+
+VM 和 Kubernetes 不作为 V1 正式交付阻断项。
 
 ## Open-source and Commercial Strategy
 
@@ -149,9 +153,9 @@ Product Definition and V1 Scope
 以下信息尚未确认：
 
 - 重点面向的企业规模；
-- 官方支持的数据库范围；
 - V1 管理端具体语言与国际化交付范围；
 - 浏览器兼容范围；
 - 开源许可证；
 - 版本发布节奏；
-- VM、Kubernetes 等后续部署方式的正式支持级别。
+- VM、Kubernetes 等后续部署方式的正式支持级别；
+- 其他数据库进入 Platform 支持矩阵的优先级。
