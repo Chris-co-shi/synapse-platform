@@ -7,6 +7,9 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.annotation.Version;
 import com.indigo.synapse.iam.identity.domain.model.UserCredential;
+import com.indigo.synapse.mybatisplus.entity.ManagedEntity;
+import com.indigo.synapse.mybatisplus.entity.VersionedEntity;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -18,12 +21,10 @@ import java.time.Instant;
  */
 @Getter
 @Setter
+@AllArgsConstructor
 @NoArgsConstructor
 @TableName("iam_user_credential")
-public class IamUserCredentialEntity {
-
-    @TableId(value = "id", type = IdType.ASSIGN_ID)
-    private String id;
+public class IamUserCredentialEntity extends VersionedEntity {
 
     private String userId;
 
@@ -36,21 +37,6 @@ public class IamUserCredentialEntity {
     private Integer failedAttempts;
 
     private Instant lockedUntil;
-
-    @Version
-    private Integer version;
-
-    @TableField(fill = FieldFill.INSERT)
-    private Instant createdAt;
-
-    @TableField(fill = FieldFill.INSERT_UPDATE)
-    private Instant updatedAt;
-
-    @TableField(fill = FieldFill.INSERT)
-    private String createdBy;
-
-    @TableField(fill = FieldFill.INSERT_UPDATE)
-    private String updatedBy;
 
     /**
      * 从领域模型创建持久化实体。
@@ -66,7 +52,7 @@ public class IamUserCredentialEntity {
         entity.setChangedAt(source.changedAt());
         entity.setFailedAttempts(source.failedAttempts());
         entity.setLockedUntil(source.lockedUntil());
-        entity.setVersion(source.version());
+        entity.setRevision(source.version());
         entity.setCreatedAt(source.createdAt());
         entity.setUpdatedAt(source.updatedAt());
         return entity;
@@ -78,7 +64,7 @@ public class IamUserCredentialEntity {
      * @return 领域模型
      */
     public UserCredential toDomain() {
-        return new UserCredential(id, userId, credentialHash, changedAt, failedAttempts,
-                lockedUntil, version, createdAt, updatedAt);
+        return new UserCredential(getId(), userId, credentialHash, changedAt, failedAttempts,
+                lockedUntil, getRevision(), getCreatedAt(), getUpdatedAt());
     }
 }
