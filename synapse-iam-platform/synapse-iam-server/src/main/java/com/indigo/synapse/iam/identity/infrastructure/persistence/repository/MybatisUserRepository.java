@@ -31,7 +31,7 @@ public class MybatisUserRepository implements UserRepository {
         int updated = userMapper.updateById(entity);
         if (updated != 1) {
             throw new OptimisticLockingFailureException(
-                    "IAM user update rejected because the persisted version changed: " + user.id());
+                    "IAM user update rejected because the persisted revision changed: " + user.id());
         }
         return toDomain(entity);
     }
@@ -61,7 +61,7 @@ public class MybatisUserRepository implements UserRepository {
         entity.setNormalizedUsername(user.normalizedUsername());
         entity.setDisplayName(user.displayName());
         entity.setStatus(user.status().name());
-        entity.setVersion(user.version());
+        entity.setRevision(user.revision());
         entity.setCreatedAt(user.createdAt());
         entity.setUpdatedAt(user.updatedAt());
         return entity;
@@ -74,7 +74,7 @@ public class MybatisUserRepository implements UserRepository {
                 entity.getNormalizedUsername(),
                 entity.getDisplayName(),
                 UserStatus.valueOf(entity.getStatus()),
-                entity.getVersion(),
+                entity.getRevision(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());
     }

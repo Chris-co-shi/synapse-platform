@@ -47,7 +47,7 @@ public class IamUserCredentialEntity extends VersionedEntity {
         entity.setChangedAt(source.changedAt());
         entity.setFailedAttempts(source.failedAttempts());
         entity.setLockedUntil(source.lockedUntil());
-        entity.setRevision(source.version());
+        entity.setRevision(source.revision());
         entity.setCreatedAt(source.createdAt());
         entity.setUpdatedAt(source.updatedAt());
         return entity;

@@ -11,7 +11,7 @@ import java.time.Instant;
  * @param changedAt 凭据最后修改时间
  * @param failedAttempts 连续认证失败次数
  * @param lockedUntil 临时锁定截止时间，未锁定时为空
- * @param version 乐观锁版本
+ * @param revision 乐观锁版本
  * @param createdAt 创建时间，尚未持久化时可以为空
  * @param updatedAt 更新时间，尚未持久化时可以为空
  */
@@ -22,7 +22,7 @@ public record UserCredential(
         Instant changedAt,
         int failedAttempts,
         Instant lockedUntil,
-        int version,
+        int revision,
         Instant createdAt,
         Instant updatedAt) {
 
@@ -43,8 +43,8 @@ public record UserCredential(
         if (failedAttempts < 0) {
             throw new IllegalArgumentException("failedAttempts must not be negative");
         }
-        if (version < 0) {
-            throw new IllegalArgumentException("version must not be negative");
+        if (revision < 0) {
+            throw new IllegalArgumentException("revision must not be negative");
         }
     }
 

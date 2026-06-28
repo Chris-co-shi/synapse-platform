@@ -119,7 +119,7 @@ synapse:
     default-zone: UTC
   security:
     resource-server:
-      enabled: true
+      enabled: false
       issuer-uri: ${IAM_ISSUER_URI:http://127.0.0.1:8100}
       jwk-set-uri: ${IAM_JWK_SET_URI:http://127.0.0.1:8100/oauth2/jwks}
       issuer-validation-enabled: true
@@ -137,6 +137,10 @@ synapse:
         - /iam/auth/refresh
         - /iam/oauth2/jwks
   gateway:
+    auth:
+      issuer: ${IAM_ISSUER_URI:http://127.0.0.1:8100}
+      audiences:
+        - ${SYNAPSE_PLATFORM_AUDIENCE:synapse-platform}
     proof:
       enabled: ${GATEWAY_PROOF_ENABLED:true}
       gateway-id: ${GATEWAY_ID:synapse-gateway}

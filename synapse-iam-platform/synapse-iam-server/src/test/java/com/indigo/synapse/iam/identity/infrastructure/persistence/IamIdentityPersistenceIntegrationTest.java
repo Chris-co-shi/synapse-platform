@@ -32,7 +32,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         "spring.cloud.nacos.discovery.enabled=false",
         "spring.cloud.nacos.config.enabled=false",
         "spring.datasource.dynamic.enabled=false",
-        "synapse.security.resource-server.enabled=false"
+        "synapse.security.resource-server.enabled=false",
+        "synapse.security.gateway-proof.enabled=false"
 })
 @Transactional
 class IamIdentityPersistenceIntegrationTest {
@@ -64,10 +65,10 @@ class IamIdentityPersistenceIntegrationTest {
                 SELECT COUNT(*)
                 FROM information_schema.tables
                 WHERE table_schema = 'public'
-                  AND table_name IN ('iam_user', 'iam_user_credential')
+                  AND table_name IN ('iam_user', 'iam_user_credential', 'iam_refresh_session')
                 """, Integer.class);
 
-        assertThat(tableCount).isEqualTo(2);
+        assertThat(tableCount).isEqualTo(3);
     }
 
     @Test
@@ -76,7 +77,7 @@ class IamIdentityPersistenceIntegrationTest {
         User queried = userRepository.findByNormalizedUsername("admin").orElseThrow();
 
         assertThat(saved.id()).isNotBlank();
-        assertThat(saved.version()).isZero();
+        assertThat(saved.revision()).isZero();
         assertThat(saved.createdAt()).isNotNull();
         assertThat(queried.id()).isEqualTo(saved.id());
         assertThat(queried.username()).isEqualTo("Admin");

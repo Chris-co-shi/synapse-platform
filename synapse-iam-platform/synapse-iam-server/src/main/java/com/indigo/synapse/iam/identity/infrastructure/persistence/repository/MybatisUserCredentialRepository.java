@@ -30,7 +30,7 @@ public class MybatisUserCredentialRepository implements UserCredentialRepository
         int updated = credentialMapper.updateById(entity);
         if (updated != 1) {
             throw new OptimisticLockingFailureException(
-                    "IAM authentication material update rejected because the persisted version changed: " + source.id());
+                    "IAM authentication material update rejected because the persisted revision changed: " + source.id());
         }
         return entity.toDomain();
     }

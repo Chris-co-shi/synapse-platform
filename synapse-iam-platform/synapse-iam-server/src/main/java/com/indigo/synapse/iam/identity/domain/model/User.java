@@ -11,7 +11,7 @@ import java.util.Objects;
  * @param normalizedUsername 登录查询和唯一约束使用的规范化用户名
  * @param displayName 展示名称
  * @param status 用户状态
- * @param version 乐观锁版本
+ * @param revision 乐观锁版本
  * @param createdAt 创建时间，尚未持久化时可以为空
  * @param updatedAt 更新时间，尚未持久化时可以为空
  */
@@ -21,7 +21,7 @@ public record User(
         String normalizedUsername,
         String displayName,
         UserStatus status,
-        int version,
+        int revision,
         Instant createdAt,
         Instant updatedAt) {
 
@@ -45,8 +45,8 @@ public record User(
         if (displayName.length() > MAX_DISPLAY_NAME_LENGTH) {
             throw new IllegalArgumentException("displayName length must not exceed 128 characters");
         }
-        if (version < 0) {
-            throw new IllegalArgumentException("version must not be negative");
+        if (revision < 0) {
+            throw new IllegalArgumentException("revision must not be negative");
         }
     }
 
@@ -71,7 +71,7 @@ public record User(
      */
     public User changeDisplayName(String newDisplayName) {
         return new User(id, username, normalizedUsername, newDisplayName, status,
-                version, createdAt, updatedAt);
+                revision, createdAt, updatedAt);
     }
 
     private static String requireText(String value, String fieldName) {

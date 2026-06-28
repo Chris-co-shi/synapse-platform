@@ -1,6 +1,11 @@
 package com.indigo.synapse.gateway.security.gatewayproof;
 
 import com.indigo.synapse.gateway.SynapseGatewayApplication;
+import com.indigo.synapse.iam.auth.AuthorizationSnapshot;
+import com.indigo.synapse.iam.auth.AuthorizationSnapshotKeys;
+import com.indigo.synapse.iam.auth.AuthorizationSnapshotStatus;
+import com.indigo.synapse.iam.auth.OpaqueTokenDigest;
+import com.indigo.synapse.iam.auth.TokenPrincipalType;
 import com.indigo.synapse.security.gatewayproof.GatewayProof;
 import com.indigo.synapse.security.gatewayproof.GatewayProofCanonicalRequest;
 import com.indigo.synapse.security.gatewayproof.GatewayProofHeaders;
@@ -14,9 +19,9 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
+import org.springframework.data.redis.core.ReactiveValueOperations;
 import org.springframework.http.HttpHeaders;
-import org.springframework.security.config.web.server.ServerHttpSecurity;
-import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -33,9 +38,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * 真实 Spring Cloud Gateway 路由、StripPrefix 和 Framework 验签集成测试。
@@ -52,7 +61,9 @@ import static org.assertj.core.api.Assertions.assertThat;
                 "synapse.gateway.proof.enabled=true",
                 "synapse.gateway.proof.gateway-id=synapse-gateway",
                 "synapse.gateway.proof.secret=0123456789abcdef0123456789abcdef",
-                "synapse.security.resource-server.enabled=false"
+                "synapse.security.resource-server.enabled=false",
+                "synapse.gateway.auth.issuer=https://iam.test",
+                "synapse.gateway.auth.audiences=synapse-platform"
         })
 @AutoConfigureWebTestClient
 class GatewayProofRouteIntegrationTest {
@@ -168,20 +179,16 @@ class GatewayProofRouteIntegrationTest {
     @TestConfiguration(proxyBeanMethods = false)
     static class TestSupport {
 
-        /**
-         * 仅为隔离 Gateway 路由阶段而放行测试请求；JWT 边界由独立集成测试覆盖。
-         *
-         * @param http Reactive 安全配置
-         * @return 测试专用全放行安全链
-         */
         @Bean
-        SecurityWebFilterChain gatewayProofTestSecurityWebFilterChain(ServerHttpSecurity http) {
-            return http
-                    .csrf(ServerHttpSecurity.CsrfSpec::disable)
-                    .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
-                    .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
-                    .authorizeExchange(exchanges -> exchanges.anyExchange().permitAll())
-                    .build();
+        @Primary
+        ReactiveStringRedisTemplate reactiveStringRedisTemplate(com.fasterxml.jackson.databind.ObjectMapper objectMapper)
+                throws Exception {
+            ReactiveStringRedisTemplate template = mock(ReactiveStringRedisTemplate.class);
+            ReactiveValueOperations<String, String> operations = mock(ReactiveValueOperations.class);
+            when(template.opsForValue()).thenReturn(operations);
+            String value = objectMapper.writeValueAsString(snapshot());
+            when(operations.get(anyString())).thenReturn(Mono.just(value));
+            return template;
         }
 
         /**
@@ -210,6 +217,27 @@ class GatewayProofRouteIntegrationTest {
                 }
             };
             return new GatewayProofNonceGenerator(fixedRandom);
+        }
+
+        private static AuthorizationSnapshot snapshot() {
+            Instant now = Instant.now();
+            return new AuthorizationSnapshot(
+                    OpaqueTokenDigest.sha256Hex(TOKEN),
+                    "user-1",
+                    TokenPrincipalType.USER,
+                    "synapse-console",
+                    "session-1",
+                    "Tester",
+                    null,
+                    Set.of(),
+                    Set.of(),
+                    "https://iam.test",
+                    Set.of("synapse-platform"),
+                    0,
+                    now.minusSeconds(5),
+                    now.plusSeconds(300),
+                    AuthorizationSnapshotStatus.ACTIVE
+            );
         }
     }
 

@@ -27,12 +27,20 @@
             <artifactId>synapse-security</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.indigo.synapse</groupId>
-            <artifactId>synapse-oauth2-resource-server-webflux</artifactId>
+            <groupId>com.indigo.synapse.platform</groupId>
+            <artifactId>synapse-iam-api</artifactId>
         </dependency>
         <dependency>
             <groupId>com.indigo.synapse</groupId>
             <artifactId>synapse-time</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-core</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.cloud</groupId>
@@ -101,6 +109,7 @@
                                         <exclude>org.springframework.boot:spring-boot-starter-jdbc</exclude>
                                         <exclude>org.springframework:spring-webmvc</exclude>
                                         <exclude>org.springframework:spring-jdbc</exclude>
+                                        <exclude>jakarta.servlet:jakarta.servlet-api</exclude>
                                         <exclude>com.baomidou:*</exclude>
                                         <exclude>com.alibaba:druid*</exclude>
                                         <exclude>com.indigo.synapse:synapse-data</exclude>

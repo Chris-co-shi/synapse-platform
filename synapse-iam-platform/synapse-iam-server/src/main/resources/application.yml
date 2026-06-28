@@ -41,7 +41,7 @@ management:
 synapse:
   security:
     resource-server:
-      enabled: true
+      enabled: false
       issuer-uri: http://127.0.0.1:8100
       jwk-set-uri: http://127.0.0.1:8100/oauth2/jwks
       audiences:
@@ -55,5 +55,27 @@ synapse:
         - /auth/login
         - /auth/refresh
         - /oauth2/jwks
+    gateway-proof:
+      enabled: ${IAM_GATEWAY_PROOF_ENABLED:true}
+      required: true
+      gateway-id: ${IAM_TRUSTED_GATEWAY_ID:synapse-gateway:synapse-iam-server}
+      secret: ${GATEWAY_PROOF_SECRET:}
+      replay-protection-enabled: ${IAM_GATEWAY_PROOF_REPLAY_ENABLED:true}
+      permit-paths:
+        - /actuator/health
+        - /actuator/health/
+        - /actuator/info
+        - /error
+        - /auth/login
+        - /auth/refresh
   time:
     default-zone: UTC
+  iam:
+    auth:
+      issuer: ${IAM_ISSUER_URI:http://127.0.0.1:8100}
+      audiences:
+        - ${SYNAPSE_PLATFORM_AUDIENCE:synapse-platform}
+      client-id: ${SYNAPSE_CONSOLE_CLIENT_ID:synapse-console}
+      access-token-ttl: ${IAM_ACCESS_TOKEN_TTL:15m}
+      refresh-token-idle-ttl: ${IAM_REFRESH_TOKEN_IDLE_TTL:7d}
+      refresh-token-absolute-ttl: ${IAM_REFRESH_TOKEN_ABSOLUTE_TTL:30d}
