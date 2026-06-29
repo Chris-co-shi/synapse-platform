@@ -1,164 +1,94 @@
 # Synapse Platform V1 总体架构
 
-## Document Metadata
-
-| Item | Value |
-| --- | --- |
-| Audience | 架构师、核心研发、测试、实施和运维人员 |
-| Purpose | 定义 V1 的总体运行结构、部署单元与数据隔离基线 |
-| Scope | Management Console、Gateway、平台微服务及基础设施 |
-| Status | Accepted |
-
-相关文档：
-
-- [V1 范围](../00-product/v1-scope.md)
-- [服务边界](service-boundary.md)
-- [安全架构](security-architecture.md)
-- [通信架构](communication-architecture.md)
-- [数据架构](data-architecture.md)
-
-## 1. Runtime Topology
-
-V1 保持独立微服务架构。
+## 1. 运行拓扑
 
 ```text
-Browser -> Management Console -> Gateway
-
-P0 Services
-  ├── IAM
-  ├── Resource
-  └── Audit
-
-P1 Services
-  ├── Config
-  ├── File
-  ├── Message
-  └── Task
-
-Infrastructure
-  ├── PostgreSQL 17
-  ├── Redis
-  ├── Nacos
-  └── RocketMQ
+Browser / Service / Third-party Client
+              |
+          HTTPS + OAuth2
+              |
+         Synapse Gateway
+              |
+         Synapse IAM API
+              |
+ PostgreSQL 17 / Redis / Nacos
 ```
 
-PostgreSQL 17 是 V1 默认、推荐和实际验证数据库。Redis 是 Opaque Access Token 授权快照的 P0 安全依赖。RocketMQ 是 Outbox 和 Audit 可靠闭环的默认基础设施。
+V1 先完成身份与访问闭环，不要求 Resource、Audit、Config、File、Message、Task 等服务同时上线。
 
-V1 不建设独立 Monitor 微服务。基础状态由 Actuator、服务健康检查、Compose healthcheck 和管理端展示提供。
+## 2. 服务职责
 
-## 2. Service Summary
+### Gateway
 
-| Service | Responsibility |
-| --- | --- |
-| Gateway | 统一入口、Token 快照验证、路由、Header 清理和 GatewayProof |
-| IAM | 身份、认证、授权关系、Token、Client 和 Redis 快照生命周期 |
-| Resource | 应用、菜单、按钮、API、权限码、资源树和导航 |
-| Audit | 操作日志、安全日志、审计日志和幂等事件消费 |
-| Config | 国际化资源、字典类型和字典项 |
-| File | 文件元数据和基础文件能力 |
-| Message | 消息、模板和发送记录 |
-| Task | 任务调度和执行记录 |
+- WebFlux 统一入口；
+- JWT 基础验证；
+- 路由级 Audience 校验；
+- Header 清理；
+- Bearer Token 转发；
+- 路由和基础流量治理。
 
-Gateway 不注入用户、角色或权限 Header。Gateway 和下游服务分别验证 Redis 授权快照。
+Gateway 不执行 Permission，不生成 GatewayProof。
 
-## 3. Engineering Structure
+### IAM
+
+- 用户、Client、Role、Permission 和授权关系；
+- OAuth2 / OIDC；
+- JWT Access Token；
+- Opaque Refresh Token；
+- Session、rotation 和 reuse detection；
+- JWK、Introspection、Revocation；
+- 基础安全审计。
+
+### Target Resource Server
+
+IAM 管理 API 自身以及后续进入 V1 的服务都必须独立验证 JWT，并执行自身功能权限和数据规则。
+
+## 3. Token 结构
 
 ```text
-synapse-xxx-platform
-├── synapse-xxx-api
-├── synapse-xxx-client
-└── synapse-xxx-server
+Access Token: JWT / RS256 / single Audience
+Refresh Token: Opaque / hashed persistence / rotation
 ```
 
-其他服务和业务系统不得依赖另一个服务的 `server` 模块。
+Access Token 不包含 roles、permissions、菜单、数据范围或租户 Claim。
 
-## 4. Communication Baseline
+## 4. 通信基线
 
-- 即时查询和命令使用 HTTP API / Client；
-- 用户调用传播原始用户 Token；
-- 后台和纯服务调用使用 Client Credentials；
-- IAM 保存授权前同步批量校验 Resource 权限码；
-- 关键事件使用本地 Outbox + RocketMQ；
-- 事件采用 At-least-once + `eventId` 幂等；
-- 非幂等命令默认不自动重试；
-- 不使用共享数据库或分布式大事务完成服务集成。
+- 用户调用使用面向目标 Resource 的 JWT；
+- 服务和第三方调用使用 Client Credentials；
+- 跨 Resource 调用由调用方申请目标 Audience Token；
+- V1 不无限转发用户 Token；
+- 不使用共享数据库或可信身份 Header；
+- 外部系统协议由项目级 Adapter 处理。
 
-## 5. Data Ownership
+## 5. 数据所有权
 
-| Service | Owned Data |
-| --- | --- |
-| IAM | 用户、组织、角色、授权关系、Client 和会话 |
-| Resource | 应用、菜单、按钮、API 和权限码目录 |
-| Audit | 操作日志、安全日志和审计记录 |
-| Config | 国际化资源和字典 |
-| File | 文件元数据和存储状态 |
-| Message | 消息、模板和发送记录 |
-| Task | 任务定义、调度和执行记录 |
+V1 的 IAM Schema 保存身份、Client、Role、Permission、Session 和 Refresh Token 摘要。
 
-Redis 授权快照由 IAM 管理生命周期，其他服务只读验证。快照彻底丢失后，现有 Access Token 失效，通过有效 Refresh Token 或重新登录生成新快照。
+Gateway 不访问数据库。其他延期模块的 Schema 不是当前 V1 完成条件。
 
-## 6. PostgreSQL Isolation
+## 6. 基础设施
 
-V1 允许服务共用一个 PostgreSQL 17 实例，但每个服务必须使用：
+- PostgreSQL 17：身份与授权事实；
+- Redis：必要的会话、安全状态和短期缓存，不作为 Opaque Access Token 每请求权威；
+- Nacos：配置和服务发现；
+- RocketMQ：不作为当前登录闭环前置条件。
 
-- 独立 Schema；
-- 独立数据库账号；
-- 独立 Flyway migration；
-- 独立 `flyway_schema_history`。
+## 7. 可用性边界
 
-Schema 包括：`iam`、`resource`、`audit`、`config`、`file`、`message` 和 `task`。
+- IAM 不可用时，新的登录、刷新和 Client Token 获取不可用；
+- 已签发 JWT 在签名、时间和本地安全校验通过时可继续使用到过期；
+- JWK 应按标准缓存；
+- 不为尚未存在的全网实时撤销需求引入复杂投影。
 
-禁止跨 Schema 查询、跨服务数据库外键以及共享 Entity、Mapper、Repository。
+## 8. 延期架构
 
-Framework 的其他数据库兼容不等于 Platform 已正式验证支持。
+Resource Catalog、Manifest、Authorization Snapshot、Revocation Feed、完整 Audit 服务、Integration Platform、多租户和高安全 Profile 均按真实需求进入后续迭代。
 
-## 7. Time Baseline
+## 9. 约束
 
-- 真实时间点使用 UTC 语义和 Java `Instant`；
-- PostgreSQL 推荐使用 `timestamptz`；
-- 业务日期使用 `LocalDate` / `date`；
-- 业务时区使用显式 IANA `ZoneId`；
-- 日期查询转换为 UTC 半开区间 `[start, end)`；
-- 禁止依赖服务器默认时区。
-
-## 8. Docker Compose
-
-V1 默认编排：
-
-- Management Console、Gateway；
-- IAM、Resource、Audit；
-- Config；
-- 已完成的 File、Message、Task；
-- PostgreSQL 17、Redis、Nacos、RocketMQ。
-
-Redis 需要持久化、healthcheck 和禁止淘汰授权快照。RocketMQ 需要支持 Outbox 积压恢复。
-
-## 9. Degradation
-
-- IAM 故障：新登录和刷新不可用，已有有效快照继续验证；
-- Resource 故障：导航和授权修改不可用，已有快照鉴权继续；
-- Audit/RocketMQ 故障：主流程继续，事件保留在 Outbox；
-- Redis 故障：只允许已缓存的低风险读取最多 30 秒，其余失败关闭；
-- Config 故障：维护不可用，可使用已缓存国际化和字典；
-- P1 其他服务故障：不影响核心身份和权限闭环。
-
-## 10. Constraints
-
-V1 禁止：
-
-- 改为模块化单体；
-- 服务直接访问其他服务数据；
-- 默认使用分布式大事务；
-- 所有交互强制事件化；
-- Gateway 通过后下游跳过认证；
-- Gateway 注入身份权限 Header；
-- 每请求同步调用 IAM 查询 Token；
-- 使用未经 Platform 验证的数据库作为 V1 发布承诺；
-- 把 Kubernetes 作为 V1 必交付方式。
-
-## 11. Next Documents
-
-1. API、事件、日志和数据库规范；
-2. Docker Compose 部署设计；
-3. Gateway、IAM、Resource、Audit、Config 等服务详细设计；
-4. 测试策略与发布验收文档。
+- 不同时维护两套 Access Token 主链路；
+- 不把目录骨架写成已交付服务；
+- 不把 Gateway 变成授权中心；
+- 不强制外部系统采用 Synapse 私有扩展；
+- 不在当前迭代顺带扩展平台模块数量。
