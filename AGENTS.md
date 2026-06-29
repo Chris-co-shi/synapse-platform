@@ -1,90 +1,76 @@
 # Synapse Platform AI 协作规范
 
-本文档约束 `synapse-platform` 整个仓库。修改模块前必须同时阅读：
+修改本仓库前必须阅读：
 
-1. 本文件。
-2. 目标一级模块目录中的 `AGENTS.md`。
-3. 模块规则引用的专题文档。
+1. 本文件；
+2. `docs/v1/00-product/v1-baseline.md`；
+3. `docs/v1/03-gap-analysis/repository-gap-analysis.md`；
+4. 目标模块最近的 `AGENTS.md`；
+5. 相关源码、测试和设计。
 
-规则优先级：当前用户任务要求 > 距离目标文件最近的 `AGENTS.md` > 上级 `AGENTS.md` > 通用文档。冲突不得静默处理，最终报告必须说明。
+规则优先级：当前用户要求 > 最近模块规则 > 本文件 > 其他文档。冲突必须显式报告。
 
-## 1. 项目定位
+## 项目定位
 
-Synapse Platform 是基于 Java 21、Spring Boot、Spring Cloud 和 Spring Cloud Alibaba 的企业级微服务平台。
+Platform 是可运行产品，可以依赖 Framework；Framework 不得反向依赖 Platform。服务之间禁止共享数据库、Entity、Mapper、Repository 或 server 模块。
 
-Platform 只能通过 Maven 依赖复用相邻 `../synapse-framework`，禁止修改 Framework 或让 Framework 反向依赖 Platform。Framework 能力以其当前根 POM、`synapse-bom`、源码和模块手册为准。
+当前 V1 只交付 Identity & Access Foundation。仓库中存在模块不代表进入 V1。
 
-## 2. 一级模块
+## V1 NOW
 
-仓库包含 Gateway、IAM、Resource、Config、Audit、File、Message、Task、Workflow、Integration、MDM、Report、Monitor 共 13 个一级模块。
+- Gateway 与 IAM；
+- OAuth 2.0 / OpenID Connect；
+- Authorization Code + PKCE；
+- Client Credentials；
+- RS256 JWT Access Token；
+- Opaque Refresh Token rotation 和 reuse detection；
+- USER / CLIENT 主体；
+- Role / Permission / Client Permission；
+- Gateway 和下游服务独立验证 JWT；
+- 基础安全审计；
+- PostgreSQL 17、Redis、Nacos 最小运行闭环。
 
-模块存在不代表进入 V1。V1 范围以 [`docs/v1/00-product/v1-scope.md`](docs/v1/00-product/v1-scope.md) 为准。
+其余平台模块当前均不是 V1 完成前置条件。
 
-Gateway 不拆分。其余模块采用：
+## 安全硬约束
 
-```text
-synapse-xxx-platform
-├── synapse-xxx-api
-├── synapse-xxx-client
-└── synapse-xxx-server
-```
+- 不再新增 Opaque Access Token 路径；
+- Gateway 保留 WebFlux Resource Server，运行在 Authentication Only 模式；
+- GatewayProof 已取消；
+- Gateway 不注入可信身份或权限 Header；
+- 下游服务必须独立验证 JWT；
+- JWT 不携带 roles、permissions、菜单、数据范围或虚假租户；
+- USER 与 CLIENT 不得相互伪装；
+- 认证材料不得进入日志或仓库。
 
-## 3. 通用分层边界
+## 企业集成边界
 
-- `api`：稳定跨服务契约，不依赖 client/server，不包含数据库实现。
-- `client`：调用适配，允许依赖对应 api，禁止依赖 server 或直接访问服务数据库。
-- `server`：启动入口与模块实现，允许依赖对应 api，禁止依赖自己的 client 或其他模块 server。
-- 跨服务调用通过 api/client 或消息契约完成，禁止共享业务 Entity、Mapper、Repository。
+MES、WMS、SAP 和遗留系统默认按外部黑盒处理。不强制使用 Framework、Synapse JWT、Manifest 或集中权限模型；协议不兼容时使用项目级 Adapter。没有多个重复场景时，不建设通用 Integration Platform。
 
-## 4. 依赖与基线
+## 架构准入
 
-- Java 21，Maven 3.9.x。
-- 根工程 import `com.indigo.synapse:synapse-bom`；官方组件 BOM 可由 Platform 直接 import。
-- 禁止循环依赖、跨服务数据库访问和 Framework -> Platform 依赖。
-- 不得引用已从当前 Framework 删除或更名的 artifact。
-- 新增生产依赖前必须说明必要性、替代方案和影响范围。
+每个需求开始前必须说明：
 
-## 5. 配置与凭据
+1. 对应哪条 V1 闭环；
+2. 当前真实消费者；
+3. 不做的后果；
+4. 成本 S/M/L/XL；
+5. NOW/NEXT/LATER/REJECTED；
+6. 本次明确不做内容。
 
-- Spring Boot 3 使用 ConfigData，不新增 `bootstrap.yml`。
-- 配置支持环境变量或外部配置中心注入，应用保持无状态。
-- 禁止提交密码、Token、Secret、私钥、真实 `.env` 或个人绝对路径。
-- 禁止在日志、异常或诊断命令中输出认证材料和完整环境变量。
+没有真实消费者或只提升架构完整感的能力，默认不进入 NOW。
 
-## 6. 启动类约定
+## 工程约束
 
-- Gateway 和各领域 server 的启动类必须位于对应领域 Java 根包。
-- 禁止将生产启动类放入 `bootstrap`、`boot`、`launcher` 或 `startup` 子包。
-- `api` 和 `client` 模块禁止存在生产启动类。
+- Gateway 只使用 WebFlux，禁止 MVC、Servlet、数据库和其他平台 server 依赖；
+- `api` 不依赖 client/server；`client` 不依赖 server；`server` 不依赖自己的 client 或其他领域 server；
+- 当前单租户，不新增 TenantContext 或租户拦截器；
+- 时间点使用 `Instant`，业务日期使用 `LocalDate`，时区使用显式 `ZoneId`；
+- 每个任务只处理一个 Gap，不顺带实现 Manifest、授权快照、Revocation Feed、多租户或 Integration Platform；
+- 不删除测试、降低断言或绕过安全校验；
+- 未经授权不得直接合并到 `main`。
 
-## 7. 数据与时间基线
-
-- PostgreSQL 17 是 V1 默认、推荐和实际验证数据库。
-- Framework 的其他数据库兼容不等于 Platform 已正式支持。
-- 每个服务使用独立 Schema、账号和 Flyway 历史。
-- 禁止跨 Schema SQL、跨服务数据库外键和共享业务持久化类型。
-- 持久化 Entity 优先使用 Framework `synapse-mybatis-plus` 已提供的 `IdEntity`、`CreatedEntity`、`MutableEntity`、`VersionedEntity`、`ManagedEntity`。
-- Entity 按实际生命周期选择满足需求的最浅基类，不统一强制 `ManagedEntity`。
-- Domain Model、DTO、Command、Query 和 Event 禁止继承 MyBatis-Plus 实体基类。
-- 默认主键为 Java `String`、PostgreSQL `varchar(19)`、MyBatis-Plus `ASSIGN_ID`。
-- 技术乐观锁字段使用 `revision`；逻辑删除字段使用 `deleted`。
-- 独立 Schema 内的新表不重复服务名称前缀；既有表更名必须通过 Flyway migration，禁止只改 `@TableName`。
-- 真实时间点使用 UTC 语义与 Java `Instant`。
-- 业务日期使用 `LocalDate`，业务时区使用显式 IANA `ZoneId`。
-- 禁止依赖服务器默认时区解释业务时间。
-- 日期区间转换为 UTC 半开区间 `[start, end)`。
-
-详细规则见 [`docs/v1/02-specification/database-conventions.md`](docs/v1/02-specification/database-conventions.md)。
-
-## 8. 修改原则
-
-- 修改前先搜索并阅读相关规则、设计、接口和测试文档。
-- 优先最小修改和现有结构，不进行未授权的大规模重构。
-- 不删除测试、降低断言、绕过校验或把临时实现伪装成最终能力。
-- 当前事实优先于旧 README、历史任务和规划描述。
-- 代码说明、计划、总结和自查使用中文；命名遵循项目既有习惯。
-
-## 9. 最低验证
+## 验证与报告
 
 ```bash
 mvn validate
@@ -92,22 +78,4 @@ mvn clean test
 git diff --check
 ```
 
-模块规则可增加更严格验证。未执行的命令必须如实标记并说明原因。
-
-## 10. 完成报告
-
-必须列出修改、新增、删除文件，核心实现，验证命令和结果，未完成事项、技术债与风险点。未获用户明确授权不得自动提交。
-
-## 11. 模块和专题索引
-
-- [V1 文档首页](docs/v1/README.md)
-- [V1 范围](docs/v1/00-product/v1-scope.md)
-- [总体架构](docs/v1/01-architecture/overall-architecture.md)
-- [服务边界](docs/v1/01-architecture/service-boundary.md)
-- [安全架构](docs/v1/01-architecture/security-architecture.md)
-- [通信架构](docs/v1/01-architecture/communication-architecture.md)
-- [数据架构](docs/v1/01-architecture/data-architecture.md)
-- [数据库与持久化规范](docs/v1/02-specification/database-conventions.md)
-- [Gateway 模块规则](synapse-gateway-platform/AGENTS.md)
-- [Gateway Docker 部署](deploy/docker/gateway/README.md)
-- 其余模块规则位于对应一级模块目录的 `AGENTS.md`。
+完成报告必须列出文件变化、Gap 决策、验证结果、未完成事项和风险。
