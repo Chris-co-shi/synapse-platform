@@ -1,120 +1,41 @@
 # Synapse Platform Documentation v1
 
-> **Build Your Enterprise Digital Foundation.**
+本目录用于支撑 Synapse Platform V1 的产品、架构、规范、设计、测试、部署和交付。
 
-本目录用于支撑 Synapse Platform 的产品、架构、规范、设计、测试、部署和交付。
+## 权威阅读顺序
 
-## Start Here
-
-1. [产品定义](00-product/product.md)
+1. [V1 架构基线](00-product/v1-baseline.md)
 2. [V1 范围与完成标准](00-product/v1-scope.md)
-3. [架构原则](01-architecture/architecture-principles.md)
-4. [总体架构](01-architecture/overall-architecture.md)
+3. [仓库差距分析](03-gap-analysis/repository-gap-analysis.md)
+4. [架构原则](01-architecture/architecture-principles.md)
 5. [系统上下文与边界](01-architecture/system-context-and-boundary.md)
-6. [服务边界](01-architecture/service-boundary.md)
-7. [安全架构](01-architecture/security-architecture.md)
-8. [通信架构](01-architecture/communication-architecture.md)
-9. [数据架构](01-architecture/data-architecture.md)
-10. [数据库与持久化规范](02-specification/database-conventions.md)
-11. [文档规范](02-specification/documentation-rules.md)
-12. [术语表](07-reference/glossary.md)
-13. [ADR-001：产品定位与边界](99-adr/ADR-001-platform-positioning.md)
-14. [ADR-002：IAM 与 Resource 服务边界](99-adr/ADR-002-iam-resource-boundary.md)
-15. [ADR-003：Token、会话与可信入口模型](99-adr/ADR-003-token-session-and-trust-boundary.md)
-16. [ADR-004：服务通信、Outbox 与 RocketMQ](99-adr/ADR-004-service-communication-and-outbox.md)
-17. [ADR-005：数据库、Redis 快照与时间模型](99-adr/ADR-005-database-redis-and-time-model.md)
+6. [总体架构](01-architecture/overall-architecture.md)
+7. [服务边界](01-architecture/service-boundary.md)
+8. [安全架构](01-architecture/security-architecture.md)
+9. [通信架构](01-architecture/communication-architecture.md)
+10. [数据架构](01-architecture/data-architecture.md)
+11. [数据库规范](02-specification/database-conventions.md)
 
-## V1 Baseline
+## 当前 V1
 
-V1 交付一个可运行的开源版本。
+V1 交付 Identity & Access Foundation：
 
-- P0：Gateway、IAM、Resource、Audit、RBAC、OAuth 2.0 / OIDC、服务端鉴权、管理端前端和 Docker Compose；
-- P1：Config、File、Message、Task；
-- 基础能力：Actuator、健康检查和管理端基础状态；
-- V1 不包含：Integration、Workflow、MDM、Report、AI Agent 平台、独立 Monitor 和 Kubernetes 正式交付。
+- OAuth 2.0 / OpenID Connect；
+- Authorization Code + PKCE；
+- Client Credentials；
+- JWT Access Token；
+- Opaque Refresh Token；
+- Gateway Authentication Only；
+- 下游 Resource Server 独立验证与权限执行；
+- USER / CLIENT 审计主体；
+- 第三方标准 OAuth2 调用。
 
-完成标准：功能可用、测试通过、文档完整、可通过 Docker Compose 安装部署，并完成平台自身闭环。
+Resource Manifest、独立 Resource Catalog、授权快照、Revocation Feed、多租户、完整 Integration Platform 和其余平台产品能力不进入当前 NOW。
 
-## Authorization Boundary
+## 文档纪律
 
-```text
-Resource  -> 定义资源与权限目录
-IAM       -> 管理主体、授权关系和 Redis 授权快照
-各服务     -> 独立验证快照并执行权限
-Audit     -> 记录资源、授权和访问行为
-Config    -> 管理国际化资源和字典
-```
-
-Gateway 透传 Bearer Token，不向下游注入用户、角色或权限 Header。
-
-## Security Baseline
-
-- Access Token 使用高熵 Opaque Token；
-- Redis 保存授权快照，Gateway 和各服务分别验证；
-- Refresh Token 使用摘要存储、rotation 和重放检测；
-- 用户与 Client Credentials 使用统一 Opaque Token 模型；
-- RS256 只用于 OIDC ID Token；
-- Access Token 默认 15 分钟，Refresh Token 空闲 7 天，会话最长 30 天；
-- Redis 故障仅允许已缓存低风险读取最多 30 秒；
-- Access Token 仅保存在前端内存，Refresh Token 保存在 `sessionStorage`；
-- Token、密码和密钥材料禁止进入日志。
-
-## Communication Baseline
-
-- 用户同步调用传播原始用户 Token；
-- 后台任务和纯服务调用使用 Client Credentials；
-- IAM 同步批量校验 Resource 权限码；
-- 资源树按应用和节点懒加载，并使用 `catalogVersion`；
-- 关键事件使用本地 Outbox + RocketMQ；
-- 采用 At-least-once + `eventId` 幂等；
-- RocketMQ 是 V1 默认基础设施；
-- 非幂等命令默认不自动重试。
-
-## Data Baseline
-
-- PostgreSQL 17 是 V1 默认、推荐和实际验证数据库；
-- Framework 的其他数据库兼容不等于 Platform 已正式验证支持；
-- 每个服务使用独立 Schema、账号和 Flyway 历史；
-- Platform 持久化 Entity 使用 Framework `synapse-mybatis-plus` 实体基类；
-- 默认主键为 Java `String` + PostgreSQL `varchar(19)` + `ASSIGN_ID`；
-- 乐观锁字段使用 `revision`，逻辑删除字段使用 `deleted`；
-- Entity 按生命周期选择最浅基类，不统一强制逻辑删除和乐观锁；
-- Redis 授权快照丢失后，现有 Access Token 失效，不从 PostgreSQL 自动重建；
-- 真实时间点使用 UTC / `Instant` / `timestamptz`；
-- 业务日期使用 `LocalDate`，业务时区使用显式 IANA `ZoneId`；
-- 日期查询统一转换为 UTC 半开区间 `[start, end)`。
-
-## Architecture Baseline
-
-- 保持独立微服务形态；
-- Gateway、IAM、Resource、Audit 为 P0；
-- Config、File、Message、Task 为 P1；
-- V1 可共用一个 PostgreSQL 实例；
-- 禁止跨 Schema 访问和跨服务共享业务数据模型。
-
-## Structure
-
-```text
-docs/v1
-├── 00-product
-├── 01-architecture
-├── 02-specification
-├── 03-design
-├── 04-testing
-├── 05-deployment
-├── 06-delivery
-├── 07-reference
-└── 99-adr
-```
-
-## Principles
-
-- 未确认的信息不得写成事实；
-- 产品范围先于架构与实现；
-- 同类信息只维护一个权威来源；
-- 文档必须服务开发、测试、部署、运维和交付；
-- 根 README 是 GitHub 门面，应现代、简洁、直观。
-
-## Current Focus
-
-产品范围和总体架构基线已经确认。数据库与持久化规范已完成，下一步进入 API 契约、事件、日志和错误码规范设计。
+- 当前事实以源码、POM、配置和测试为准；
+- 目标状态以 `v1-baseline.md` 为准；
+- 差异必须记录在 Gap Analysis；
+- 计划能力不得写成已实现能力；
+- 旧 ADR 与新基线冲突时，应新增 supersede 说明或重写，不得并存两套有效口径。
