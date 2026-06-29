@@ -1,17 +1,31 @@
 # Synapse Platform
 
-> **Build Your Enterprise Digital Foundation.**
+> **Build a standard, reliable and integrable enterprise foundation.**
 
-企业数字化平台，为企业提供统一身份、安全、入口、治理与共享平台能力。
+Synapse Platform 是基于 Java 21、Spring Boot、Spring Cloud、OAuth 2.0 和 OpenID Connect 的企业级公共能力平台。
 
-## Documentation
+当前 V1 聚焦 **Identity & Access Foundation**：
 
-- [产品定义](docs/v1/00-product/product.md)
-- [V1 范围与完成标准](docs/v1/00-product/v1-scope.md)
-- [架构原则](docs/v1/01-architecture/architecture-principles.md)
-- [系统上下文与边界](docs/v1/01-architecture/system-context-and-boundary.md)
-- [文档首页](docs/v1/README.md)
+- 用户使用 Authorization Code + PKCE；
+- 服务和第三方使用 Client Credentials；
+- Access Token 使用 RS256 JWT；
+- Refresh Token 使用 Opaque Token；
+- Gateway 只做认证与路由 Audience 校验；
+- 下游服务独立验证 JWT 并执行权限；
+- 审计主体区分 USER 与 CLIENT。
 
-## V1 Goal
+外部 MES、WMS、SAP 和遗留系统默认按黑盒处理。它们不被强制使用 Framework、Synapse JWT、Manifest 或集中权限模型；协议不兼容时通过项目级 Adapter 处理。
 
-交付一个可运行、可测试、文档完整、能够通过 Docker Compose 安装部署的开源版本。平台先完成自身闭环，再考虑真实业务系统接入。
+## Start Here
+
+1. [V1 架构基线](docs/v1/00-product/v1-baseline.md)
+2. [V1 范围](docs/v1/00-product/v1-scope.md)
+3. [仓库差距分析](docs/v1/03-gap-analysis/repository-gap-analysis.md)
+4. [架构原则](docs/v1/01-architecture/architecture-principles.md)
+5. [系统上下文](docs/v1/01-architecture/system-context-and-boundary.md)
+6. [安全架构](docs/v1/01-architecture/security-architecture.md)
+7. [文档首页](docs/v1/README.md)
+
+仓库中的 Opaque Access Token、Redis 授权快照和 GatewayProof 属于待迁移代码事实，不代表目标架构。
+
+所有新增能力必须明确标记为 `NOW`、`NEXT`、`LATER` 或 `REJECTED`。
