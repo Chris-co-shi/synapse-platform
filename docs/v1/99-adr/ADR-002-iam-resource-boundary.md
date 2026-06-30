@@ -4,6 +4,8 @@
 
 Accepted
 
+> 2026-06-30 状态补充：当前 V1 不再要求 `synapse-resource-platform` 作为 P0 独立运行服务。Resource/Scope/Permission 的最小模型先收口在 IAM，独立 Resource Catalog 作为 NEXT 候选重新评估。
+
 ## Context
 
 V1 需要同时解决两类问题：
@@ -15,18 +17,25 @@ V1 需要同时解决两类问题：
 
 ## Decision
 
-`synapse-resource-platform` 作为 V1 P0 独立微服务。
+`synapse-resource-platform` 保留为 NEXT 候选，不作为当前 V1 完成前置条件。
+
+当前 V1 决策：
+
+- IAM 保存 V1 所需的用户、Client、Role、Permission 和授权关系；
+- Resource/Scope/Permission 的最小模型先由 IAM 管理；
+- 各受保护服务执行自身接口权限和业务数据规则；
+- 独立 Resource Catalog、Manifest、目录版本和授权快照扩展进入 NEXT/LATER 评估。
 
 职责划分：
 
 ```text
-Resource  -> 定义有什么资源和权限
-IAM       -> 决定谁拥有什么权限
-各服务     -> 执行请求权限
-Audit     -> 记录资源、授权和访问行为
+IAM       -> V1 最小身份、Client、Role、Permission 和授权关系
+各服务     -> 执行请求权限和业务规则
+Resource  -> NEXT 候选：独立资源目录和导航能力
+Audit     -> NEXT 候选：完整审计服务
 ```
 
-Resource 负责：
+后续独立 Resource Catalog 若进入 NEXT，可负责：
 
 - 应用、菜单、页面和按钮；
 - API 资源目录；
@@ -37,13 +46,14 @@ Resource 负责：
 
 IAM 负责：
 
-- 用户、组织和角色；
+- 用户和角色；
+- OAuth Client；
 - 用户角色关系；
 - 角色权限码关系；
-- 认证、OAuth 2.0 / OIDC 和 Token；
+- 认证、Token 和后续 OAuth 2.0 / OIDC；
 - 用户最终权限集合计算。
 
-两个服务通过稳定、全局唯一的 `permission_code` 关联，不共享 Resource 内部主键。
+未来拆分 Resource Catalog 时，两个服务通过稳定、全局唯一的 `permission_code` 关联，不共享 Resource 内部主键。
 
 ## Runtime Rule
 

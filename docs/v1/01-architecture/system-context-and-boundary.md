@@ -16,13 +16,15 @@
 
 - 用户与 Client 身份；
 - OAuth2 / OIDC；
-- JWT Access Token 与 JWK；
+- Opaque Access Token 与 Redis 授权快照；
 - Opaque Refresh Token；
 - Role、Permission 和 Client Permission；
 - Gateway 入口认证；
-- 下游 JWT 验证契约；
+- 下游 Token 验证契约；
 - 基础安全审计；
 - 第三方标准 Client Credentials。
+
+OAuth2/OIDC、标准 Client Credentials、OIDC Discovery、ID Token 和 UserInfo 当前未实现，仍属于 V1 计划范围。
 
 ## Platform V1 不负责
 
@@ -61,10 +63,10 @@ Framework 是 Java/Spring 官方适配器，不是第三方接入前提。
 
 ```text
 User or Client
-  -> IAM issues audience-bound JWT
-  -> Gateway validates JWT
-  -> target API validates JWT again
+  -> IAM issues Opaque Access Token
+  -> Gateway validates Redis authorization snapshot
+  -> target API validates snapshot again
   -> permission decision and audit
 ```
 
-旧文档中的 Opaque Access Token、Redis 每请求快照和 GatewayProof 已不再是目标架构。
+当前实现包含 Opaque Access Token、Redis 授权快照和 GatewayProof。不得把该自定义认证闭环写成标准 OAuth2 Authorization Server。

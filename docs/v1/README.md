@@ -15,6 +15,7 @@
 9. [通信架构](01-architecture/communication-architecture.md)
 10. [数据架构](01-architecture/data-architecture.md)
 11. [数据库规范](02-specification/database-conventions.md)
+12. [Host-local 认证闭环测试状态](04-testing/host-local-auth-loop.md)
 
 ## 当前 V1
 
@@ -23,14 +24,18 @@ V1 交付 Identity & Access Foundation：
 - OAuth 2.0 / OpenID Connect；
 - Authorization Code + PKCE；
 - Client Credentials；
-- JWT Access Token；
+- Opaque Access Token；
 - Opaque Refresh Token；
-- Gateway Authentication Only；
-- 下游 Resource Server 独立验证与权限执行；
+- Redis 授权快照；
+- Gateway 与 IAM 独立验证快照；
 - USER / CLIENT 审计主体；
 - 第三方标准 OAuth2 调用。
 
-Resource Manifest、独立 Resource Catalog、授权快照、Revocation Feed、多租户、完整 Integration Platform 和其余平台产品能力不进入当前 NOW。
+当前认证闭环的最新 host-local 状态为 `Passed with Known Limitations`。已知限制是 Refresh Token reuse detection 尚未完成 token family 整体撤销，旧 Refresh Token 重放后 successor Refresh Token 仍可继续 refresh。
+
+当前已实现的是自定义 IAM 登录 API + Opaque Token 会话体系，不是标准 OAuth2 Authorization Server。OAuth2/OIDC、标准 Token Endpoint、Authorization Code + PKCE、Client Credentials、OIDC Discovery、ID Token 和 UserInfo 仍为计划实现。
+
+Resource Manifest、独立 Resource Catalog、Revocation Feed、多租户、完整 Integration Platform 和其余平台产品能力不进入当前 NOW。
 
 ## 文档纪律
 

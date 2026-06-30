@@ -4,6 +4,8 @@
 
 Accepted
 
+> 2026-06-30 状态补充：当前实现符合本文的 Opaque Access Token、Redis 授权快照、GatewayProof 和 Opaque Refresh Token rotation 方向，但 reuse detection 仍存在已知缺陷，尚未完成 token family 整体撤销。OAuth2/OIDC 标准入口仍为计划实现。
+
 ## Context
 
 Synapse Platform V1 需要同时满足：
@@ -48,9 +50,11 @@ V1 使用高熵 Opaque Refresh Token：
 
 - IAM 数据库只保存安全摘要；
 - 每次刷新执行 rotation；
-- 旧 Token 重放会撤销对应 token family 和会话；
+- 目标要求：旧 Token 重放会撤销对应 token family 和会话；
 - 刷新重新计算角色和权限，并替换 Redis 授权快照；
 - 并发刷新通过原子事务保证只有一次成功。
+
+当前已知缺陷：旧 Refresh Token 重放请求本身返回 401，但 successor Refresh Token 仍可继续 refresh，同一个 token family 中仍存在 ACTIVE session，family 尚未整体撤销。因此 reuse detection 当前只能标记为部分实现。
 
 ### Revocation
 
@@ -93,9 +97,9 @@ Opaque Token 授权快照证明主体与权限，GatewayProof 证明请求经过
 
 ### OIDC and RS256
 
-RS256 只用于需要签名的 OIDC ID Token，不用于 Access Token。
+RS256 只用于计划中的 OIDC ID Token，不用于 Access Token。
 
-IAM 管理 RSA 私钥和 `kid`，JWK 端点只发布公钥。开发、测试、beta 和生产密钥相互隔离，生产密钥通过 Docker Secret、受限挂载或外部 Secret 系统注入。
+OIDC Discovery、ID Token、UserInfo 和相关 JWK 生命周期当前未实现。实现后 IAM 管理 RSA 私钥和 `kid`，JWK 端点只发布公钥。开发、测试、beta 和生产密钥相互隔离，生产密钥通过 Docker Secret、受限挂载或外部 Secret 系统注入。
 
 每个环境使用唯一 IAM issuer，V1 统一 audience 为 `synapse-platform`。
 
@@ -114,6 +118,12 @@ IAM 管理 RSA 私钥和 `kid`，JWK 端点只发布公钥。开发、测试、b
 - 按账号和来源 IP 双维度限流；
 - CORS 由 Gateway 维护明确 Origin 白名单；
 - 禁止 `*`，且因为不使用 Cookie，不启用 credentials。
+
+### Registration Boundary
+
+V1 不提供普通用户公开自主注册。首个管理员通过受控 bootstrap 初始化，后续用户由管理员创建；邀请激活可在后续评估。
+
+OAuth Client 需要管理员登记、修改、禁用和 Secret 轮换。V1 不实现公开 Dynamic Client Registration。
 
 ## Alternatives
 

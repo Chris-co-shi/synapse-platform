@@ -9,7 +9,11 @@
 | Scope | Management Console、Gateway、IAM、Resource、Audit、Config 及所有受保护微服务 |
 | Status | Accepted |
 
-本文定义 V1 必须达到的目标架构，不代表相关能力已经实现。实际完成状态必须由源码、自动化测试和发布记录证明。
+本文定义 V1 必须达到的目标架构，并记录当前已确认实现状态。实际完成状态必须由源码、host-local 测试和发布记录证明。
+
+当前认证闭环状态：`Passed with Known Limitations`。
+
+已知限制：Refresh Token reuse detection 尚未完成 token family 整体撤销，successor Refresh Token 在旧 Token 重放后仍可使用。
 
 ## 1. Security Principles
 
@@ -21,7 +25,7 @@
 - 每个服务执行自身接口、资源和数据权限；
 - Management Console 和内部网络均不视为可信；
 - Token、密码、私钥和 Client Secret 不进入日志；
-- Redis 授权快照、GatewayProof 和权限检查失败时默认拒绝，只有明确的短时只读降级例外。
+- Redis 授权快照、GatewayProof 和权限检查失败时默认拒绝。当前 host-local 行为是 Redis 快照缺失返回 401，Redis 不可用返回 503。
 
 ## 2. Trust Boundaries
 
@@ -43,7 +47,7 @@ V1 Docker Compose 默认只对外暴露 Management Console 和 Gateway 所需端
 
 ### 3.1 Opaque Access Token
 
-V1 使用 IAM 生成的高熵 Opaque Access Token。
+V1 使用 IAM 生成的高熵 Opaque Access Token。当前已确认实现 Opaque Access Token 与 Redis 授权快照。
 
 Token 本身只是不可预测的 Bearer 字符串，不携带用户、角色、权限、菜单、路由或其他业务信息。
 
@@ -95,6 +99,8 @@ V1 至少区分：
 
 Client Token 不伪装成用户 Token，也不能默认继承平台管理员权限。
 
+当前标准 Client Credentials 尚未实现，`CLIENT` Token 属于 V1 后续 OAuth2 计划。
+
 ### 3.4 TTL
 
 V1 默认值：
@@ -141,6 +147,17 @@ Refresh Token：
 - 重放后撤销对应 token family 和会话；
 - 并发刷新必须通过原子事务保证只有一次成功。
 
+当前状态：
+
+- Refresh rotation 已实现；
+- 并发 refresh 控制已实现；
+- 旧 Refresh Token 重放请求本身返回 401；
+- successor Refresh Token 仍能继续 refresh；
+- 同一个 token family 中仍存在 ACTIVE session；
+- family 尚未整体撤销。
+
+因此 reuse detection 当前为部分实现，host-local 测试结论为 `Passed with Known Limitations`。
+
 会话至少表达：
 
 - session id；
@@ -155,11 +172,20 @@ Refresh Token：
 
 ## 6. Login, Refresh and Logout
 
+当前已实现自定义管理端认证接口：
+
+- `/auth/login`；
+- `/auth/refresh`；
+- `/auth/logout`；
+- `/auth/me`。
+
+这些接口不是标准 OAuth2 Token Endpoint。当前尚未实现 `/oauth2/token`、`grant_type`、Client Authentication、Client Credentials、Authorization Code、PKCE、OAuth2 标准错误响应、OIDC Discovery、ID Token 或 UserInfo。
+
 ### 6.1 Login
 
 ```text
 Client -> Gateway -> IAM
-  -> GatewayProof verification
+  -> optional GatewayProof verification
   -> credential and account status verification
   -> role and permission calculation
   -> create Redis authorization snapshot
@@ -181,7 +207,7 @@ Client -> Gateway -> IAM
 
 ```text
 Client -> Gateway -> IAM
-  -> validate GatewayProof
+  -> optional GatewayProof verification
   -> hash and validate Refresh Token
   -> validate session and client
   -> detect reuse
@@ -255,7 +281,7 @@ Redis 不可用时：
 
 30 秒窗口结束后，所有受保护请求失败关闭。
 
-服务不能把 Redis 故障误判为 401 或 403；基础设施不可用应返回统一 503，并记录安全和运行告警。
+当前 host-local 已确认：Redis 授权快照缺失返回 401，Redis 不可用返回 503。服务不能把 Redis 故障误判为 401 或 403；基础设施不可用应返回统一 503，并记录安全和运行告警。
 
 ### 8.3 Recovery
 
@@ -329,7 +355,7 @@ IAM、Resource、Audit、Config、File、Message、Task 等受保护服务都必
 
 RS256 不用于 V1 Access Token。
 
-RS256 用于需要签名的 OIDC ID Token：
+OIDC Discovery、ID Token、UserInfo 和标准 OAuth2 Authorization Server 当前尚未实现。后续 RS256 用于需要签名的 OIDC ID Token：
 
 - IAM 持有 RSA 私钥；
 - JWK 端点只发布公钥；
@@ -343,7 +369,33 @@ RS256 用于需要签名的 OIDC ID Token：
 
 环境 issuer 使用每个环境唯一的 IAM 外部地址。V1 统一 audience 为 `synapse-platform`。
 
-## 13. Client Credentials
+## 13. OAuth2/OIDC and Client Credentials
+
+当前 OAuth2 状态：`Planned / Not Implemented`。
+
+当前尚未实现：
+
+- `/oauth2/token`；
+- `grant_type`；
+- Client Authentication；
+- Client Credentials；
+- Authorization Code；
+- PKCE；
+- OAuth2 标准错误响应；
+- OIDC Discovery；
+- ID Token；
+- UserInfo。
+
+后续实施顺序：
+
+1. 修复 Refresh Token reuse detection 的 token family 整体撤销。
+2. 重新执行 host-local 真实链路测试。
+3. 建设 OAuth Client 模型和持久化。
+4. 接入 Spring Authorization Server。
+5. 实现 Client Credentials。
+6. 实现 Authorization Code + PKCE。
+7. 接入现有 Refresh Session。
+8. 实现最小 OIDC 闭环。
 
 V1 支持 Client Credentials，但范围限定为：
 
@@ -354,6 +406,16 @@ V1 支持 Client Credentials，但范围限定为：
 不提供任意第三方自助注册。
 
 Client Secret 只保存安全哈希；Client Token 使用 Opaque Access Token + Redis 快照，并标记 `principal_type=CLIENT`。
+
+## 13.1 User and OAuth Client Registration
+
+V1 不提供普通用户公开自主注册。
+
+- 首个管理员通过受控 bootstrap 初始化；
+- 后续用户由管理员创建；
+- 邀请激活可在后续考虑；
+- OAuth Client 需要管理员登记、修改、禁用、Secret 轮换；
+- V1 不实现公开 Dynamic Client Registration。
 
 ## 14. Management Console Security
 
@@ -402,16 +464,28 @@ V1 至少可靠记录：
 
 ## 17. Current Implementation Warning
 
-以下能力只有在真实实现和测试完成后才能标记为可用：
+以下能力当前已确认实现：
 
 - Opaque Access Token 生成和 Redis 快照；
 - Framework Opaque Token Resource Server 适配；
-- Refresh Token 持久化、rotation 和 reuse detection；
+- Gateway 与 IAM 独立验证授权快照；
+- GatewayProof；
+- Refresh Token 持久化和 rotation；
+- 并发 refresh 控制；
+- logout；
+- Redis 快照缺失返回 401；
+- Redis 不可用返回 503。
+
+以下能力只有在真实实现和测试完成后才能标记为可用：
+
+- Refresh Token reuse detection 的 token family 整体撤销；
 - 授权变更后的快照更新和撤销；
 - Redis 故障 30 秒只读降级；
 - OIDC ID Token、JWK 和密钥轮换；
-- 所有下游服务的 GatewayProof 与 nonce replay 验证；
 - Client Credentials；
+- Authorization Code + PKCE；
+- OIDC Discovery；
+- UserInfo；
 - Management Console Token 存储策略；
 - 安全 Outbox 与 Audit 消费闭环。
 

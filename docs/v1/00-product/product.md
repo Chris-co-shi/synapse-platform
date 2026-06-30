@@ -73,23 +73,27 @@ P0 核心包括：
 
 - Gateway；
 - IAM；
-- Resource Center；
-- Audit；
 - RBAC；
 - OAuth 2.0 / OpenID Connect；
 - Opaque Access Token 与 Redis 授权快照；
-- 操作日志、安全日志和审计日志；
+- Opaque Refresh Token；
+- 自定义管理端认证闭环；
+- 基础安全审计；
 - 平台管理端前端；
 - Docker Compose 部署。
 
 P1 包括：
 
+- Resource Center；
+- Audit；
 - File；
 - Message；
 - Task；
 - Config，其中 V1 最小闭环是国际化资源和字典。
 
-Resource 定义资源与权限目录；IAM 管理主体、授权关系和授权快照；各微服务执行自身权限；Audit 负责追溯。
+IAM 管理主体、授权关系和授权快照；Gateway 与 IAM protected API 独立验证授权快照；各微服务执行自身权限。Resource Center 和完整 Audit 服务进入后续迭代。
+
+当前已实现的是自定义 IAM 登录 API + Opaque Token 会话体系。标准 OAuth2/OIDC、Client Credentials、Authorization Code + PKCE、OIDC Discovery、ID Token 和 UserInfo 仍为计划实现。
 
 Monitor 在 V1 不作为独立微服务，只提供健康检查和基础运行状态。Integration 不进入 V1。
 

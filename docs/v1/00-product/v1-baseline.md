@@ -14,10 +14,12 @@ V1 的目标是交付 **Synapse Identity & Access Foundation**：
 
 - Synapse 自身用户能够使用标准 OAuth 2.0 / OpenID Connect 登录；
 - Synapse 服务和第三方调用方能够使用 Client Credentials 调用 Synapse API；
-- Gateway 与目标 Resource Server 都能独立验证 JWT Access Token；
+- Gateway 与目标 Resource Server 都能独立验证 Opaque Access Token 授权快照；
 - USER 与 CLIENT 主体能够执行功能权限检查并写入稳定审计主体；
 - Refresh Token 支持 rotation、撤销和 reuse detection；
 - 所有能力可在 PostgreSQL 17、Redis、Nacos 的基础环境中运行、测试和部署。
+
+当前已确认实现的是自定义 IAM 登录 API + Opaque Token 会话体系。OAuth2/OIDC 是 V1 必须完成范围，但当前状态为 `Planned / Not Implemented`，不得把计划能力写成已实现。
 
 ## 3. 真实企业环境假设
 
@@ -28,7 +30,7 @@ V1 的目标是交付 **Synapse Identity & Access Foundation**：
 因此：
 
 1. 不强制外部系统使用 Synapse Framework；
-2. 不强制外部系统接受 Synapse JWT；
+2. 不强制外部系统接受 Synapse 私有 Token 或 GatewayProof；
 3. 不强制外部系统发布 Resource Manifest；
 4. 不尝试在 V1 统一其内部角色、权限和数据范围；
 5. 不兼容时由项目级 Adapter / Anti-Corruption Layer 适配；
@@ -40,26 +42,26 @@ V1 的目标是交付 **Synapse Identity & Access Foundation**：
 
 ```text
 Web / Management Client
-  -> Authorization Code + PKCE
+  -> Authorization Code + PKCE（计划）
 IAM
-  -> JWT Access Token + Opaque Refresh Token
+  -> Opaque Access Token + Opaque Refresh Token
 Gateway
-  -> JWT 基础验证 + 路由 Audience 验证
+  -> Redis 授权快照验证
 Target Resource Server
-  -> 再次验证 JWT + 功能权限检查 + 审计主体
+  -> 再次验证授权快照 + 功能权限检查 + 审计主体
 ```
 
-验收要求：登录、刷新、当前主体、退出、无 Token 返回 401、无权限返回 403、USER 审计字段正确。
+当前已实现自定义 `/auth/login`、`/auth/refresh`、`/auth/logout`、`/auth/me`。验收要求：登录、刷新、当前主体、退出、无 Token 返回 401、无权限返回 403、USER 审计字段正确。
 
 ### 4.2 服务调用闭环
 
 ```text
 Platform Service / Worker
-  -> Client Credentials
+  -> Client Credentials（计划）
 IAM
-  -> CLIENT JWT
+  -> CLIENT Opaque Access Token
 Target Resource Server
-  -> JWT 验证 + Client 权限检查 + CLIENT 审计主体
+  -> 授权快照验证 + Client 权限检查 + CLIENT 审计主体
 ```
 
 验收要求：每个调用方使用独立 Client，只能申请允许的 Resource 和 Scope；CLIENT 不伪装成 USER。
@@ -68,13 +70,13 @@ Target Resource Server
 
 ```text
 SAP / ERP / Legacy Adapter / Partner System
-  -> OAuth 2.0 Client Credentials
+  -> OAuth 2.0 Client Credentials（计划）
 IAM
-  -> standard Bearer JWT
+  -> standard Bearer Token
 Synapse API
 ```
 
-第三方只需支持标准 Token Endpoint 和 Bearer Header，不要求理解 `authz_ver`、授权快照、RocketMQ 或 Framework。
+第三方只需支持标准 Token Endpoint 和 Bearer Header，不要求理解 GatewayProof、Redis 授权快照、RocketMQ 或 Framework。该标准入口尚未实现。
 
 ## 5. V1 安全协议
 
@@ -85,7 +87,6 @@ Synapse API
 - Authorization Code + PKCE S256；
 - Client Credentials；
 - OAuth 2.0 Security Best Current Practice；
-- JWT Access Token Profile；
 - Resource Indicators；
 - Authorization Server Metadata；
 - JWK Set；
@@ -96,16 +97,12 @@ Synapse API
 
 Access Token：
 
-- JWT；
-- RS256；
-- Header 包含 `typ=at+jwt`、`kid`；
-- USER 默认 TTL 10 分钟；
-- CLIENT 默认 TTL 5 分钟；
-- Clock skew 60 秒；
-- 单个 Token 只有一个 Audience；
-- Scope 使用空格分隔字符串；
+- Opaque；
+- 高熵不可预测；
+- IAM 对 Token 计算安全摘要；
+- Redis 保存授权快照；
 - 不携带 roles、permissions、菜单或数据范围；
-- USER 包含 `sid`，CLIENT 不包含；
+- USER 与 CLIENT 通过 principal type 区分；
 - 单租户 V1 不包含 `tenant_id`。
 
 Refresh Token：
@@ -115,26 +112,26 @@ Refresh Token：
 - 每次刷新 rotation；
 - 旧 Token 重用触发 family / session 撤销和安全审计。
 
-## 6. Gateway 边界
+当前已知缺陷：旧 Refresh Token 重放请求本身返回 401，但 successor Refresh Token 仍可继续 refresh，同一 token family 中仍存在 ACTIVE session，family 尚未整体撤销。
 
-Gateway 保留 `synapse-oauth2-resource-server-webflux`，运行在 **Authentication Only** 模式。
+## 6. Gateway 边界
 
 Gateway 负责：
 
-- 验证签名、Issuer、时间、Token 类型和必要 Claim；
-- 按目标路由验证唯一 Audience；
+- 验证 Opaque Access Token 授权快照；
+- Redis 快照缺失时返回 401；
+- Redis 不可用时返回 503；
 - 最小公开路径控制；
 - 清理外部可伪造的身份和权限 Header；
 - 原样转发 `Authorization: Bearer`；
+- 当前实现包含 GatewayProof；
 - 路由、限流、熔断和 Trace 传播。
 
 Gateway 不负责：
 
-- GatewayProof；
 - 可信用户 Header 注入；
 - Role、Permission 或数据权限判断；
-- 授权快照加载；
-- 替代下游 Resource Server 验证 JWT。
+- 替代下游 Resource Server 验证 Token。
 
 ## 7. IAM V1 边界
 
@@ -144,12 +141,12 @@ IAM 当前集中承载：
 - OAuth Client 与凭据轮换；
 - Role、Permission 和授权关系；
 - Resource Identifier 与 Scope 的最小注册；
-- Authorization Server / OIDC Provider；
-- JWT Access Token 签发；
+- 自定义 `/auth/*` 登录、刷新、退出和当前主体接口；
+- Opaque Access Token 签发和 Redis 授权快照；
 - Opaque Refresh Token、Session、rotation 和 reuse detection；
-- JWK 生命周期；
-- 基础 Introspection 和 Revocation；
 - 登录、授权与安全审计事件。
+
+Authorization Server / OIDC Provider、标准 `/oauth2/token`、Client Authentication、Client Credentials、Authorization Code + PKCE、OIDC Discovery、ID Token 和 UserInfo 当前未实现，仍属于 V1 计划范围。
 
 V1 不要求独立 Resource Catalog 微服务。`synapse-resource-platform` 保留为 NEXT 候选，不作为 V1 运行闭环依赖。
 
@@ -171,20 +168,26 @@ V1 使用 Allow-only 模型：
 
 ### NOW
 
-- OAuth2/OIDC Authorization Server；
-- JWT Access Token、JWK、Audience、Scope；
+- 自定义 IAM 登录 API + Opaque Token 会话体系；
+- Opaque Access Token、Redis 授权快照；
 - Opaque Refresh Token rotation / reuse detection；
 - USER / CLIENT 主体；
 - Role / Permission / Client Permission；
-- Gateway Authentication Only；
-- WebMVC / WebFlux Resource Server；
+- Gateway 与 IAM 独立验证授权快照；
 - 审计主体与基础安全审计；
-- 第三方 Client Credentials；
 - 单租户；
 - PostgreSQL 17、Redis、Nacos 的最小部署闭环。
 
 ### NEXT
 
+- 修复 Refresh Token reuse detection 的 token family 整体撤销；
+- 重新执行 host-local 真实链路测试；
+- OAuth Client 模型和持久化；
+- Spring Authorization Server；
+- Client Credentials；
+- Authorization Code + PKCE；
+- 接入现有 Refresh Session；
+- 最小 OIDC Discovery、ID Token 和 UserInfo 闭环；
 - 外部 OIDC / SAML IdP 联合；
 - 身份映射；
 -独立 Resource Catalog 的重新评估；
@@ -204,10 +207,9 @@ V1 使用 Allow-only 模型：
 
 ### REJECTED
 
-- GatewayProof；
 - Gateway 注入可信身份或权限 Header；
 - 强制第三方使用 Framework；
-- 强制第三方接受 Synapse JWT；
+- 强制第三方接受 Synapse 私有扩展；
 - 强制第三方维护 Manifest；
 - 把所有 MES/WMS/QMS 视为 Synapse 原生系统；
 - 在 V1 建设万能企业集成注册中心；
@@ -231,10 +233,10 @@ V1 完成必须由代码、自动化测试和部署验证证明：
 
 - 用户登录、刷新、退出和当前主体链路通过；
 - Client Credentials 链路通过；
-- JWT 签名、Issuer、Audience、时间、Token 类型校验通过；
-- Gateway 与下游重复验证通过；
+- Opaque Access Token 与 Redis 授权快照校验通过；
+- Gateway 与下游独立验证通过；
 - 权限允许和拒绝测试通过；
 - USER / CLIENT 审计主体正确；
-- Refresh rotation、并发刷新和 reuse detection 通过；
+- Refresh rotation、并发刷新和 reuse detection 的 token family 整体撤销通过；
 - 第三方可只依据标准 OAuth2 文档完成 Client Credentials 调用；
 - Docker Compose 或等价最小部署可重复启动和验证。

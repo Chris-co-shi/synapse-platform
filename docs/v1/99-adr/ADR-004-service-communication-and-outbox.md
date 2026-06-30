@@ -21,7 +21,7 @@ V1 需要同时满足：
 
 用户发起的同步调用传播原始用户 Opaque Access Token。
 
-后台任务、Outbox 投递器、定时处理和纯服务调用使用 Client Credentials Opaque Access Token。
+后台任务、Outbox 投递器、定时处理和纯服务调用目标使用 Client Credentials Opaque Access Token。当前标准 Client Credentials 尚未实现，该句描述 V1 目标。
 
 服务身份不得伪装成用户身份。V1 不引入 Token Exchange。
 

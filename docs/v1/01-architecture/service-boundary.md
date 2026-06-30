@@ -5,7 +5,7 @@
 ```text
 Gateway -> 入口认证和路由
 IAM     -> 身份、Token、授权关系和管理 API
-Service -> 独立 JWT 验证和最终授权
+Service -> 独立 Token 验证和最终授权
 Adapter -> 异构外部系统协议转换
 ```
 
@@ -14,19 +14,20 @@ Adapter -> 异构外部系统协议转换
 负责：
 
 - WebFlux 路由；
-- JWT 基础验证；
-- 路由 Audience 校验；
+- Opaque Access Token 授权快照验证；
+- Redis 快照缺失返回 401；
+- Redis 不可用返回 503；
 - Header 清理；
 - Bearer Token 转发；
+- 当前 GatewayProof 处理；
 - Trace 和基础流量治理。
 
 不负责：
 
-- GatewayProof；
 - Role、Permission 或数据权限；
 - 可信身份 Header；
 - 数据库访问；
-- 替代下游 JWT 验证。
+- 替代下游 Token 验证。
 
 ## 3. IAM
 
@@ -36,12 +37,14 @@ Adapter -> 异构外部系统协议转换
 - OAuth Client 和凭据轮换；
 - Role、Permission、用户直接授权、Client Permission；
 - Resource Identifier 与 Scope 的最小配置；
-- OAuth2 / OIDC；
-- JWT Access Token；
+- 自定义 `/auth/login`、`/auth/refresh`、`/auth/logout`、`/auth/me`；
+- Opaque Access Token；
+- Redis 授权快照；
 - Opaque Refresh Token 和 Session；
 - rotation 和 reuse detection；
-- JWK、Introspection、Revocation；
 - 基础安全审计。
+
+OAuth2/OIDC、标准 `/oauth2/token`、Client Authentication、Client Credentials、Authorization Code + PKCE、OIDC Discovery、ID Token 和 UserInfo 当前未实现，属于 V1 后续计划。
 
 不负责：
 
@@ -55,7 +58,7 @@ Adapter -> 异构外部系统协议转换
 
 每个目标服务必须：
 
-1. 验证签名、Issuer、Audience、时间和 Token 类型；
+1. 验证 Opaque Access Token 授权快照；
 2. 识别 USER 或 CLIENT；
 3. 执行自身功能权限；
 4. 执行自身数据权限和领域规则；
@@ -108,7 +111,7 @@ synapse-xxx-platform
 
 | 组件 | 当前 V1 数据 |
 | --- | --- |
-| IAM | 用户、Client、Role、Permission、授权关系、Session、Refresh Token 摘要、JWK 元数据 |
+| IAM | 用户、Client、Role、Permission、授权关系、Session、Refresh Token 摘要；OAuth2/OIDC JWK 元数据为后续计划 |
 | Gateway | 无业务数据库 |
 | Resource / Audit / Config / File / Message / Task | 非当前 V1 完成前置条件 |
 

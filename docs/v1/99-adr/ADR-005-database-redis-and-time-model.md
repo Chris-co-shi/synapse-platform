@@ -40,7 +40,7 @@ Redis 授权快照彻底丢失后：
 - 所有现有 Access Token 立即失效；
 - 有效 Refresh Token 可以生成新的 Access Token 和授权快照；
 - Refresh Token 不可用时重新登录；
-- Client Credentials 客户端重新申请 Token；
+- 后续标准 Client Credentials 客户端重新申请 Token；
 - 不从 PostgreSQL 自动重建全部活动 Access Token。
 
 ### Time and Time Zone
